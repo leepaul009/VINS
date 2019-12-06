@@ -170,6 +170,8 @@ void System::PubImageData(double dStampSec, Mat &img)
     
 }
 
+// ImuConstPtr： 惯导数据{时间， 加速度向量， 角速度ImuConstPtr}
+// ImgConstPtr： 图像数据{时间， 3DPts， ids， us， vs, velXs, velYs}
 vector<pair<vector<ImuConstPtr>, ImgConstPtr>> System::getMeasurements()
 {
     vector<pair<vector<ImuConstPtr>, ImgConstPtr>> measurements;
@@ -245,6 +247,7 @@ void System::PubImuData(double dStampSec, const Eigen::Vector3d &vGyr,
 }
 
 // thread: visual-inertial odometry
+// VIO主要流程
 void System::ProcessBackEnd()
 {
     cout << "1 ProcessBackEnd start" << endl;
@@ -315,7 +318,7 @@ void System::ProcessBackEnd()
 
             // TicToc t_s;
             map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> image;
-            for (unsigned int i = 0; i < img_msg->points.size(); i++) 
+            for (unsigned int i = 0; i < img_msg->points.size(); i++) // 当前帧特征点数量
             {
                 int v = img_msg->id_of_point[i] + 0.5;
                 int feature_id = v / NUM_OF_CAM;
@@ -333,6 +336,7 @@ void System::ProcessBackEnd()
                 image[feature_id].emplace_back(camera_id, xyz_uv_velocity);
             }
             TicToc t_processImage;
+			// 1.初始化： 需要进行多次processImage，积累一个滑窗的帧
             estimator.processImage(image, img_msg->header);
             
             if (estimator.solver_flag == Estimator::SolverFlag::NON_LINEAR)

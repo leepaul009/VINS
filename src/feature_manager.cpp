@@ -42,16 +42,20 @@ int FeatureManager::getFeatureCount()
 }
 
 
-bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double td)
+bool FeatureManager::addFeatureCheckParallax(
+    int frame_count, 
+    const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, 
+    double td)
 {
     //ROS_DEBUG("input feature: %d", (int)image.size());
     //ROS_DEBUG("num of feature: %d", getFeatureCount());
     double parallax_sum = 0;
     int parallax_num = 0;
     last_track_num = 0;
-    for (auto &id_pts : image)
+    for (auto &id_pts : image) // 遍历特征点
     {
-        FeaturePerFrame f_per_fra(id_pts.second[0].second, td);
+        FeaturePerFrame f_per_fra(id_pts.second[0].second, // 3D点对于帧的信息
+                                  td);
 
         int feature_id = id_pts.first;
         auto it = find_if(feature.begin(), feature.end(), [feature_id](const FeaturePerId &it)
@@ -117,7 +121,10 @@ void FeatureManager::debugShow()
     }
 }
 
-vector<pair<Vector3d, Vector3d>> FeatureManager::getCorresponding(int frame_count_l, int frame_count_r)
+// 返回两帧的共视点
+vector<pair<Vector3d, Vector3d>> FeatureManager::getCorresponding(
+    int frame_count_l, 
+    int frame_count_r)
 {
     vector<pair<Vector3d, Vector3d>> corres;
     for (auto &it : feature)

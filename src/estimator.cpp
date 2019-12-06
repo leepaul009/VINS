@@ -14,8 +14,7 @@ using namespace myslam;
 Estimator::Estimator() : f_manager{Rs}
 {
     // ROS_INFO("init begins");
-
-    for (size_t i = 0; i < WINDOW_SIZE + 1; i++)
+    for (size_t i = 0; i < WINDOW_SIZE + 1; i++) // WINDOW_SIZE=10
     {
         pre_integrations[i] = nullptr;
     }
@@ -30,7 +29,7 @@ Estimator::Estimator() : f_manager{Rs}
 
 void Estimator::setParameter()
 {
-    for (int i = 0; i < NUM_OF_CAM; i++)
+    for (int i = 0; i < NUM_OF_CAM; i++) // NUM_OF_CAM=1
     {
         tic[i] = TIC[i];
         ric[i] = RIC[i];
@@ -113,10 +112,14 @@ void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const
 
     if (!pre_integrations[frame_count])
     {
-        pre_integrations[frame_count] = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
+        pre_integrations[frame_count] = new IntegrationBase{acc_0, 
+                                                            gyr_0, 
+                                                            Bas[frame_count], 
+                                                            Bgs[frame_count]};
     }
     if (frame_count != 0)
     {
+	    // 预积分， 计算PVQ的积分增量的误差的jacobian, covariance
         pre_integrations[frame_count]->push_back(dt, linear_acceleration, angular_velocity);
         //if(solver_flag != NON_LINEAR)
         tmp_pre_integration->push_back(dt, linear_acceleration, angular_velocity);
@@ -142,6 +145,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
 {
     //ROS_DEBUG("new image coming ------------------------------------------");
     // cout << "Adding feature points: " << image.size()<<endl;
+    // 将image中的3D点相对于帧的信息置于f_manager中
     if (f_manager.addFeatureCheckParallax(frame_count, image, td))
         marginalization_flag = MARGIN_OLD;
     else
@@ -158,7 +162,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     all_image_frame.insert(make_pair(header, imageframe));
     tmp_pre_integration = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
 
-    if (ESTIMATE_EXTRINSIC == 2)
+    if (ESTIMATE_EXTRINSIC == 2) // current ESTIMATE_EXTRINSIC=0
     {
         cout << "calibrating extrinsic param, rotation movement is needed" << endl;
         if (frame_count != 0)
@@ -179,6 +183,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
 
     if (solver_flag == INITIAL)
     {
+		// 积累完一个滑窗数量的帧后， 开始初始化
         if (frame_count == WINDOW_SIZE)
         {
             bool result = false;
@@ -244,10 +249,12 @@ bool Estimator::initialStructure()
     {
         map<double, ImageFrame>::iterator frame_it;
         Vector3d sum_g;
+		// 初始化中， Loop一个滑窗的帧数
         for (frame_it = all_image_frame.begin(), frame_it++; frame_it != all_image_frame.end(); frame_it++)
         {
             double dt = frame_it->second.pre_integration->sum_dt;
-            Vector3d tmp_g = frame_it->second.pre_integration->delta_v / dt;
+			// 假设第一帧的加速度积分只有G的影响，得到重力加速度G
+            Vector3d tmp_g = frame_it->second.pre_integration->delta_v / dt; 
             sum_g += tmp_g;
         }
         Vector3d aver_g;
@@ -273,23 +280,26 @@ bool Estimator::initialStructure()
     Vector3d T[frame_count + 1];
     map<int, Vector3d> sfm_tracked_points;
     vector<SFMFeature> sfm_f;
-    for (auto &it_per_id : f_manager.feature)
+    // 遍历滑窗内跟踪的所有3D点，构造vector<SFMFeature>
+    for (auto &it_per_id : f_manager.feature) 
     {
         int imu_j = it_per_id.start_frame - 1;
         SFMFeature tmp_feature;
         tmp_feature.state = false;
         tmp_feature.id = it_per_id.feature_id;
-        for (auto &it_per_frame : it_per_id.feature_per_frame)
+        for (auto &it_per_frame : it_per_id.feature_per_frame) // observation
         {
             imu_j++;
-            Vector3d pts_j = it_per_frame.point;
-            tmp_feature.observation.push_back(make_pair(imu_j, Eigen::Vector2d{pts_j.x(), pts_j.y()}));
+            Vector3d pts_j = it_per_frame.point; //归一化平面坐标
+            tmp_feature.observation.push_back(
+                make_pair(imu_j, Eigen::Vector2d{pts_j.x(), pts_j.y()}));
         }
         sfm_f.push_back(tmp_feature);
     }
     Matrix3d relative_R;
     Vector3d relative_T;
     int l;
+    // 计算当前帧到参考帧的R，T。参考帧：与当前帧匹配特征点较多的{关键帧，？}。
     if (!relativePose(relative_R, relative_T, l))
     {
         cout << "Not enough features or parallax; Move device around" << endl;
@@ -313,6 +323,7 @@ bool Estimator::initialStructure()
     {
         // provide initial guess
         cv::Mat r, rvec, t, D, tmp_r;
+        // 对于第一帧，做如下处理
         if ((frame_it->first) == Headers[i])
         {
             frame_it->second.is_key_frame = true;
@@ -331,7 +342,7 @@ bool Estimator::initialStructure()
         cv::Rodrigues(tmp_r, rvec);
         cv::eigen2cv(P_inital, t);
 
-        frame_it->second.is_key_frame = false;
+        frame_it->second.is_key_frame = false; // 此前的参考帧被设成非关键帧
         vector<cv::Point3f> pts_3_vector;
         vector<cv::Point2f> pts_2_vector;
         for (auto &id_pts : frame_it->second.points)
@@ -369,7 +380,8 @@ bool Estimator::initialStructure()
         MatrixXd T_pnp;
         cv::cv2eigen(t, T_pnp);
         T_pnp = R_pnp * (-T_pnp);
-        frame_it->second.R = R_pnp * RIC[0].transpose();
+        // frame的R/T为imu(body)坐标系到cam坐标系
+        frame_it->second.R = R_pnp * RIC[0].transpose(); // c_k+1 => c_0 & (c=>b)^T:b=>c
         frame_it->second.T = T_pnp;
     }
     if (visualInitialAlign())
@@ -459,7 +471,12 @@ bool Estimator::visualInitialAlign()
     return true;
 }
 
-bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l)
+// 在滑窗内寻找与当前帧的匹配特征点数较多的关键帧作为参考帧L
+// 并通过求基础矩阵cv::findFundamentalMat计算出当前帧到参考帧的T
+bool Estimator::relativePose(
+    Matrix3d &relative_R, 
+    Vector3d &relative_T, 
+    int &l)
 {
     // find previous frame which contians enough correspondance and parallex with newest frame
     for (int i = 0; i < WINDOW_SIZE; i++)
@@ -478,7 +495,10 @@ bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l)
                 sum_parallax = sum_parallax + parallax;
             }
             average_parallax = 1.0 * sum_parallax / int(corres.size());
-            if (average_parallax * 460 > 30 && m_estimator.solveRelativeRT(corres, relative_R, relative_T))
+            if (average_parallax * 460 > 30 
+                && m_estimator.solveRelativeRT(corres, 
+                                               relative_R, 
+                                               relative_T))
             {
                 l = i;
                 //ROS_DEBUG("average_parallax %f choose l %d and newest frame to triangulate the whole structure", average_parallax * 460, l);

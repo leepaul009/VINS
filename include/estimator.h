@@ -90,7 +90,7 @@ class Estimator
     Vector3d back_P0, last_P, last_P0;
     double Headers[(WINDOW_SIZE + 1)];
 
-    IntegrationBase *pre_integrations[(WINDOW_SIZE + 1)];
+    IntegrationBase *pre_integrations[(WINDOW_SIZE + 1)]; // size=11
     Vector3d acc_0, gyr_0;
 
     vector<double> dt_buf[(WINDOW_SIZE + 1)];

@@ -17,6 +17,7 @@ struct SFMFeature
 {
     bool state;
     int id;
+	// observation中的2D点是{归一化平面坐标，不是像素坐标}
     vector<pair<int,Vector2d>> observation;
     double position[3];
     double depth;
@@ -29,7 +30,8 @@ struct ReprojectionError3D
 		{}
 
 	template <typename T>
-	bool operator()(const T* const camera_R, const T* const camera_T, const T* point, T* residuals) const
+	bool operator()(const T* const camera_R, const T* const camera_T, 
+					const T* point, T* residuals) const
 	{
 		T p[3];
 		ceres::QuaternionRotatePoint(camera_R, point, p);

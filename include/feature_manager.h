@@ -31,9 +31,9 @@ public:
     cur_td = td;
   }
   double cur_td;
-  Vector3d point;
+  Vector3d point; // 对于Camera Frame（以光心为原点）的归一化平面坐标
   Vector2d uv;
-  Vector2d velocity;
+  Vector2d velocity; // 如何得到的？？什么坐标下？？
   double z;
   bool is_used;
   double parallax;
@@ -47,6 +47,7 @@ class FeaturePerId
 public:
   const int feature_id;
   int start_frame;
+  // 此3D点的observations
   vector<FeaturePerFrame> feature_per_frame;
 
   int used_num;

@@ -85,12 +85,12 @@ private:
 
     std::condition_variable con;
     double current_time = -1;
-    std::queue<ImuConstPtr> imu_buf;
-    std::queue<ImgConstPtr> feature_buf;
+    std::queue<ImuConstPtr> imu_buf; // 存储IMU，每个item是一个{加速度，角速度}
+    std::queue<ImgConstPtr> feature_buf; // element：一个frame的多个特征点
     // std::queue<PointCloudConstPtr> relo_buf;
     int sum_of_wait = 0;
 
-    std::mutex m_buf;
+    std::mutex m_buf; // imu_buf和feature_buf的锁
     std::mutex m_state;
     std::mutex i_buf;
     std::mutex m_estimator;
