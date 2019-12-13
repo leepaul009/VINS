@@ -192,6 +192,7 @@ vector<pair<vector<ImuConstPtr>, ImgConstPtr>> System::getMeasurements()
             return measurements;
         }
 
+        // buffer中的第一个imu输入在buffer中第一帧之后，则看之后一帧。
         if (!(imu_buf.front()->header < feature_buf.front()->header + estimator.td))
         {
             cerr << "throw img, only should happen at the beginning" << endl;
@@ -201,6 +202,7 @@ vector<pair<vector<ImuConstPtr>, ImgConstPtr>> System::getMeasurements()
         ImgConstPtr img_msg = feature_buf.front();
         feature_buf.pop();
 
+        // 将所有当前帧之前的imu输入存储在IMUs中。
         vector<ImuConstPtr> IMUs;
         while (imu_buf.front()->header < img_msg->header + estimator.td)
         {
@@ -208,7 +210,9 @@ vector<pair<vector<ImuConstPtr>, ImgConstPtr>> System::getMeasurements()
             imu_buf.pop();
         }
         // cout << "1 getMeasurements IMUs size: " << IMUs.size() << endl;
-        IMUs.emplace_back(imu_buf.front());
+
+        // 此imu输入或和img同步，或在img之后。
+        IMUs.emplace_back(imu_buf.front()); 
         if (IMUs.empty()){
             cerr << "no imu between two image" << endl;
         }
@@ -216,6 +220,7 @@ vector<pair<vector<ImuConstPtr>, ImgConstPtr>> System::getMeasurements()
         //     << " imu begin: "<< IMUs.front()->header 
         //     << " end: " << IMUs.back()->header
         //     << endl;
+
         measurements.emplace_back(IMUs, img_msg);
     }
     return measurements;
@@ -272,6 +277,8 @@ void System::ProcessBackEnd()
         {
             auto img_msg = measurement.second;
             double dx = 0, dy = 0, dz = 0, rx = 0, ry = 0, rz = 0;
+            // 帧间的所有imu输入：第一个imu一定在前一阵之后或同步，
+            // 最后一个imu或和当前帧之后或同步。
             for (auto &imu_msg : measurement.first)
             {
                 double t = imu_msg->header;
@@ -280,7 +287,7 @@ void System::ProcessBackEnd()
                 {
                     if (current_time < 0)
                         current_time = t;
-                    double dt = t - current_time;
+                    double dt = t - current_time; //两imu输入间隔
                     assert(dt >= 0);
                     current_time = t;
                     dx = imu_msg->linear_acceleration.x();
@@ -292,7 +299,7 @@ void System::ProcessBackEnd()
                     estimator.processIMU(dt, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz));
                     // printf("1 BackEnd imu: dt:%f a: %f %f %f w: %f %f %f\n",dt, dx, dy, dz, rx, ry, rz);
                 }
-                else
+                else // 一个measurement最后一个imu可能有：imu_t>=img_t
                 {
                     double dt_1 = img_t - current_time;
                     double dt_2 = t - img_t;
@@ -336,7 +343,8 @@ void System::ProcessBackEnd()
                 image[feature_id].emplace_back(camera_id, xyz_uv_velocity);
             }
             TicToc t_processImage;
-			// 1.初始化： 需要进行多次processImage，积累一个滑窗的帧
+			// 1.初始化： 需要进行多次processImage，积累10帧即1个滑窗
+            // 2.正常：
             estimator.processImage(image, img_msg->header);
             
             if (estimator.solver_flag == Estimator::SolverFlag::NON_LINEAR)

@@ -5,6 +5,7 @@ int FeaturePerId::endFrame()
     return start_frame + feature_per_frame.size() - 1;
 }
 
+// Rs是指针，指向Estimator的预积分变量Rs
 FeatureManager::FeatureManager(Matrix3d _Rs[])
     : Rs(_Rs)
 {
@@ -206,6 +207,9 @@ VectorXd FeatureManager::getDepthVector()
     return dep_vec;
 }
 
+// Ps[]: sfm方法计算得到的位移T ??ToBeCheck
+// tic[]: 待解
+// ric[]: 旋转R(cam系->imu系)
 void FeatureManager::triangulate(Vector3d Ps[], Vector3d tic[], Matrix3d ric[])
 {
     for (auto &it_per_id : feature)
@@ -219,6 +223,7 @@ void FeatureManager::triangulate(Vector3d Ps[], Vector3d tic[], Matrix3d ric[])
         int imu_i = it_per_id.start_frame, imu_j = imu_i - 1;
 
         assert(NUM_OF_CAM == 1);
+        // svd_A尺寸为：2*此特征点的观测帧数, 4
         Eigen::MatrixXd svd_A(2 * it_per_id.feature_per_frame.size(), 4);
         int svd_idx = 0;
 
@@ -228,10 +233,11 @@ void FeatureManager::triangulate(Vector3d Ps[], Vector3d tic[], Matrix3d ric[])
         P0.leftCols<3>() = Eigen::Matrix3d::Identity();
         P0.rightCols<1>() = Eigen::Vector3d::Zero();
 
+        // 对于此特征点的所有观测帧
+        // 这里假设所有观测帧是连续的 ？？ToBeCheck
         for (auto &it_per_frame : it_per_id.feature_per_frame)
         {
             imu_j++;
-
             Eigen::Vector3d t1 = Ps[imu_j] + Rs[imu_j] * tic[0];
             Eigen::Matrix3d R1 = Rs[imu_j] * ric[0];
             Eigen::Vector3d t = R0.transpose() * (t1 - t0);
@@ -247,7 +253,9 @@ void FeatureManager::triangulate(Vector3d Ps[], Vector3d tic[], Matrix3d ric[])
                 continue;
         }
         assert(svd_idx == svd_A.rows());
-        Eigen::Vector4d svd_V = Eigen::JacobiSVD<Eigen::MatrixXd>(svd_A, Eigen::ComputeThinV).matrixV().rightCols<1>();
+        Eigen::Vector4d svd_V = Eigen::JacobiSVD<Eigen::MatrixXd>(
+            svd_A, 
+            Eigen::ComputeThinV).matrixV().rightCols<1>();
         double svd_method = svd_V[2] / svd_V[3];
         //it_per_id->estimated_depth = -b / A;
         //it_per_id->estimated_depth = svd_V[2] / svd_V[3];

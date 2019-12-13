@@ -6,6 +6,8 @@
 #include <ceres/ceres.h>
 using namespace Eigen;
 
+// IntegrationBase包含两帧间的imu预积分信息
+// 每当处理新的帧（和前一帧之间）的多个imu时，会初始化IntegrationBase
 class IntegrationBase
 {
   public:
@@ -14,13 +16,22 @@ class IntegrationBase
                     const Eigen::Vector3d &_gyr_0,
                     const Eigen::Vector3d &_linearized_ba, 
                     const Eigen::Vector3d &_linearized_bg)
-        : acc_0{_acc_0}, gyr_0{_gyr_0}, 
-          linearized_acc{_acc_0}, linearized_gyr{_gyr_0},
-          linearized_ba{_linearized_ba}, linearized_bg{_linearized_bg},
-            jacobian{Eigen::Matrix<double, 15, 15>::Identity()}, covariance{Eigen::Matrix<double, 15, 15>::Zero()},
-          sum_dt{0.0}, delta_p{Eigen::Vector3d::Zero()}, delta_q{Eigen::Quaterniond::Identity()}, delta_v{Eigen::Vector3d::Zero()}
+        : acc_0{_acc_0}, 
+          gyr_0{_gyr_0}, 
+          linearized_acc{_acc_0}, 
+          linearized_gyr{_gyr_0},
+          linearized_ba{_linearized_ba}, 
+          linearized_bg{_linearized_bg},
+          jacobian{Eigen::Matrix<double, 15, 15>::Identity()}, 
+          covariance{Eigen::Matrix<double, 15, 15>::Zero()},
+          sum_dt{0.0}, 
+          delta_p{Eigen::Vector3d::Zero()}, 
+          delta_q{Eigen::Quaterniond::Identity()}, 
+          delta_v{Eigen::Vector3d::Zero()}
 
     {
+        // 在系统第一次收到imu输入时，noise为参数输入值。
+        // 前四个为acc/gyr的noise，后两个为acc/gyr的bias的noise。
         noise = Eigen::Matrix<double, 18, 18>::Zero();
         noise.block<3, 3>(0, 0) =  (ACC_N * ACC_N) * Eigen::Matrix3d::Identity();
         noise.block<3, 3>(3, 3) =  (GYR_N * GYR_N) * Eigen::Matrix3d::Identity();
@@ -33,7 +44,9 @@ class IntegrationBase
     /* 
     // dt: time interval between previous and current IMU signal
     */
-    void push_back(double dt, const Eigen::Vector3d &acc, const Eigen::Vector3d &gyr)
+    void push_back(double dt, 
+                   const Eigen::Vector3d &acc, 
+                   const Eigen::Vector3d &gyr)
     {
         dt_buf.push_back(dt);
         acc_buf.push_back(acc);
@@ -80,16 +93,17 @@ class IntegrationBase
                                                   un_gyr(1) * _dt / 2, 
                                                   un_gyr(2) * _dt / 2);
         // 中值法估测acc, 初始化时会更新bias_gyro, 并使用更新后的bias重新预积分
-        Vector3d un_acc_0 = delta_q * (_acc_0 - linearized_ba);
+        // 这里计算两个imu输入的平均acc时，没有考虑重力g ??
+        Vector3d un_acc_0 = delta_q        * (_acc_0 - linearized_ba);
         Vector3d un_acc_1 = result_delta_q * (_acc_1 - linearized_ba);
         Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);
-        // 计算当前时刻（当前IMU输入)的PV增量, 累加当前对应帧内所有IMU数据
+        // 计算两帧之间IMU输入时刻i(在_dt间隔内)的PV增量, 累加当前对应帧内所有IMU数据
         result_delta_p = delta_p + delta_v * _dt + 0.5 * un_acc * _dt * _dt;
         result_delta_v = delta_v + un_acc * _dt;
         // 预积分不考虑bias(acc&gyr)的变化
         result_linearized_ba = linearized_ba;
         result_linearized_bg = linearized_bg;         
-        // 更新jacobian和covariance
+        // 更新jacobian和covariance(包含重力??)
         if(update_jacobian)
         {
             Vector3d w_x = 0.5 * (_gyr_0 + _gyr_1) - linearized_bg;
@@ -149,7 +163,9 @@ class IntegrationBase
         }
     }
 
-    void propagate(double _dt, const Eigen::Vector3d &_acc_1, const Eigen::Vector3d &_gyr_1)
+    void propagate(double _dt, 
+                   const Eigen::Vector3d &_acc_1, 
+                   const Eigen::Vector3d &_gyr_1)
     {
         dt = _dt;
         acc_1 = _acc_1;
@@ -160,6 +176,8 @@ class IntegrationBase
         Vector3d result_linearized_ba;
         Vector3d result_linearized_bg;
 
+        // 从上一时刻到当前时刻_dt的间隔，用前一和当前imu输入的acc/gyr求解PVQ
+        // 此PVQ是包括历史信息的积累数值
         midPointIntegration(_dt, acc_0, gyr_0, _acc_1, _gyr_1, 
                             delta_p, delta_q, delta_v, // PVQ增量
                             linearized_ba, linearized_bg, // bias增量
@@ -175,15 +193,23 @@ class IntegrationBase
         // 预积分不考虑bias(acc&gyr)的变化
         linearized_ba = result_linearized_ba;
         linearized_bg = result_linearized_bg;
+
         delta_q.normalize();
         sum_dt += dt;
         acc_0 = acc_1;
         gyr_0 = gyr_1;  
-     
     }
 
-    Eigen::Matrix<double, 15, 1> evaluate(const Eigen::Vector3d &Pi, const Eigen::Quaterniond &Qi, const Eigen::Vector3d &Vi, const Eigen::Vector3d &Bai, const Eigen::Vector3d &Bgi,
-                                          const Eigen::Vector3d &Pj, const Eigen::Quaterniond &Qj, const Eigen::Vector3d &Vj, const Eigen::Vector3d &Baj, const Eigen::Vector3d &Bgj)
+    Eigen::Matrix<double, 15, 1> evaluate(const Eigen::Vector3d    &Pi, 
+                                          const Eigen::Quaterniond &Qi, 
+                                          const Eigen::Vector3d    &Vi, 
+                                          const Eigen::Vector3d    &Bai, 
+                                          const Eigen::Vector3d    &Bgi,
+                                          const Eigen::Vector3d    &Pj, 
+                                          const Eigen::Quaterniond &Qj, 
+                                          const Eigen::Vector3d    &Vj, 
+                                          const Eigen::Vector3d    &Baj, 
+                                          const Eigen::Vector3d    &Bgj)
     {
         Eigen::Matrix<double, 15, 1> residuals;
 
@@ -211,10 +237,12 @@ class IntegrationBase
     }
 
     double dt;
-    Eigen::Vector3d acc_0, gyr_0;
-    Eigen::Vector3d acc_1, gyr_1;
+    Eigen::Vector3d acc_0, gyr_0; // 前一帧
+    Eigen::Vector3d acc_1, gyr_1; // 当前帧
 
+    // linearized_acc/gyr是当前帧(和前一帧间)的第一个imu输入。
     const Eigen::Vector3d linearized_acc, linearized_gyr;
+    // acc/gyr的bias
     Eigen::Vector3d linearized_ba, linearized_bg;
 
     Eigen::Matrix<double, 15, 15> jacobian, covariance;
@@ -223,13 +251,16 @@ class IntegrationBase
     Eigen::Matrix<double, 18, 18> noise;
 
     double sum_dt;
+    // 论文中imu的PVQ增量(两帧间的)，
+    // 此PVQ的积分从帧间第一个imu输入开始。
     Eigen::Vector3d delta_p;
     Eigen::Quaterniond delta_q;
     Eigen::Vector3d delta_v;
 
-    std::vector<double> dt_buf;
-    std::vector<Eigen::Vector3d> acc_buf;
-    std::vector<Eigen::Vector3d> gyr_buf;
+    // 两个imu输入的时间间隔，imu输入的加速度和角速度
+    std::vector<double> dt_buf; 
+    std::vector<Eigen::Vector3d> acc_buf;  
+    std::vector<Eigen::Vector3d> gyr_buf; 
 
 };
 /*

@@ -72,15 +72,16 @@ class Estimator
 //////////////// OUR SOLVER //////////////////
     SolverFlag solver_flag;
     MarginalizationFlag  marginalization_flag;
-    Vector3d g;
+    Vector3d g; // ?
     MatrixXd Ap[2], backup_A;
     VectorXd bp[2], backup_b;
 
     Matrix3d ric[NUM_OF_CAM];
     Vector3d tic[NUM_OF_CAM];
 
-    Vector3d Ps[(WINDOW_SIZE + 1)];
-    Vector3d Vs[(WINDOW_SIZE + 1)];
+    // 
+    Vector3d Ps[(WINDOW_SIZE + 1)]; 
+    Vector3d Vs[(WINDOW_SIZE + 1)]; 
     Matrix3d Rs[(WINDOW_SIZE + 1)];
     Vector3d Bas[(WINDOW_SIZE + 1)];
     Vector3d Bgs[(WINDOW_SIZE + 1)];
@@ -91,8 +92,11 @@ class Estimator
     double Headers[(WINDOW_SIZE + 1)];
 
     IntegrationBase *pre_integrations[(WINDOW_SIZE + 1)]; // size=11
+    // 用在processIMU中，存储前一个imu输入的信号值
     Vector3d acc_0, gyr_0;
 
+    // 为每一帧维护一个vector，从此帧的第二imu开始存储此imu输入
+    // dt_buf中存储的是第一个imu到第二个imu的时间间隔，以此类推
     vector<double> dt_buf[(WINDOW_SIZE + 1)];
     vector<Vector3d> linear_acceleration_buf[(WINDOW_SIZE + 1)];
     vector<Vector3d> angular_velocity_buf[(WINDOW_SIZE + 1)];

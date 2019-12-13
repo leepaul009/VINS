@@ -12,6 +12,8 @@ double MIN_PARALLAX;
 double ACC_N, ACC_W;
 double GYR_N, GYR_W;
 
+// Rotation/Transition from camera frame to imu frame, imu^R_cam？
+// 从相机参考系到imu参考系的旋转，和位移？
 vector<Eigen::Matrix3d> RIC;
 vector<Eigen::Vector3d> TIC;
 
@@ -29,8 +31,6 @@ string VINS_RESULT_PATH;
 // string IMU_TOPIC;
 double ROW, COL;
 double TD, TR;
-
-
 
 int FOCAL_LENGTH;
 string IMAGE_TOPIC;
@@ -99,6 +99,7 @@ void readParameters(string config_file)
     }
     else
     {
+        // Rotation from camera frame to imu frame, imu^R_cam
         if (ESTIMATE_EXTRINSIC == 1)
         {
             // ROS_WARN(" Optimize extrinsic param around initial guess!");

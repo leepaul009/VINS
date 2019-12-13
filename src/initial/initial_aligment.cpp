@@ -19,6 +19,7 @@ void solveGyroscopeBias(map<double, ImageFrame> &all_image_frame, Vector3d* Bgs)
         tmp_A.setZero();
         VectorXd tmp_b(3);
         tmp_b.setZero();
+        // q_ij: q(c_0, b_k)T * q(c_0, b_k+1)
         Eigen::Quaterniond q_ij(frame_i->second.R.transpose() * frame_j->second.R);
         tmp_A = frame_j->second.pre_integration->jacobian.template block<3, 3>(O_R, O_BG);
         tmp_b = 2 * (frame_j->second.pre_integration->delta_q.inverse() * q_ij).vec();
@@ -57,6 +58,7 @@ MatrixXd TangentBasis(Vector3d &g0)
     return bc;
 }
 
+// g: gravity in the c0 frame
 void RefineGravity(map<double, ImageFrame> &all_image_frame, Vector3d &g, VectorXd &x)
 {
     Vector3d g0 = g.normalized() * G.norm(); // g向量的单位向量 * 向量G的模长
@@ -72,7 +74,7 @@ void RefineGravity(map<double, ImageFrame> &all_image_frame, Vector3d &g, Vector
 
     map<double, ImageFrame>::iterator frame_i;
     map<double, ImageFrame>::iterator frame_j;
-    for(int k = 0; k < 4; k++)
+    for(int k = 0; k < 4; k++) // why 4 loop?
     {
         MatrixXd lxly(3, 2); // 计算向量b1和b2
         lxly = TangentBasis(g0);
@@ -129,7 +131,7 @@ void RefineGravity(map<double, ImageFrame> &all_image_frame, Vector3d &g, Vector
         g0 = (g0 + lxly * dg).normalized() * G.norm(); 
         //double s = x(n_state - 1);
     }   
-    g = g0;
+    g = g0; // gravity in the c0 frame ?
 }
 
 bool LinearAlignment(map<double, ImageFrame> &all_image_frame, Vector3d &g, VectorXd &x)

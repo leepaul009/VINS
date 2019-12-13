@@ -56,12 +56,16 @@ bool Problem::AddVertex(std::shared_ptr<Vertex> vertex) {
     return true;
 }
 
-void Problem::AddOrderingSLAM(std::shared_ptr<myslam::backend::Vertex> v) {
-    if (IsPoseVertex(v)) {
+void Problem::AddOrderingSLAM(std::shared_ptr<myslam::backend::Vertex> v) 
+{
+    if (IsPoseVertex(v)) 
+    {
         v->SetOrderingId(ordering_poses_);
         idx_pose_vertices_.insert(pair<ulong, std::shared_ptr<Vertex>>(v->Id(), v));
         ordering_poses_ += v->LocalDimension();
-    } else if (IsLandmarkVertex(v)) {
+    } 
+    else if (IsLandmarkVertex(v)) 
+    {
         v->SetOrderingId(ordering_landmarks_);
         ordering_landmarks_ += v->LocalDimension();
         idx_landmark_vertices_.insert(pair<ulong, std::shared_ptr<Vertex>>(v->Id(), v));
@@ -90,19 +94,22 @@ void Problem::ExtendHessiansPriorSize(int dim)
     H_prior_.bottomRows(dim).setZero();
 }
 
-bool Problem::IsPoseVertex(std::shared_ptr<myslam::backend::Vertex> v) {
+bool Problem::IsPoseVertex(std::shared_ptr<myslam::backend::Vertex> v) 
+{
     string type = v->TypeInfo();
     return type == string("VertexPose") ||
             type == string("VertexSpeedBias");
 }
 
-bool Problem::IsLandmarkVertex(std::shared_ptr<myslam::backend::Vertex> v) {
+bool Problem::IsLandmarkVertex(std::shared_ptr<myslam::backend::Vertex> v) 
+{
     string type = v->TypeInfo();
     return type == string("VertexPointXYZ") ||
            type == string("VertexInverseDepth");
 }
 
-bool Problem::AddEdge(shared_ptr<Edge> edge) {
+bool Problem::AddEdge(shared_ptr<Edge> edge) 
+{
     if (edges_.find(edge->Id()) == edges_.end()) {
         edges_.insert(pair<ulong, std::shared_ptr<Edge>>(edge->Id(), edge));
     } else {
@@ -155,7 +162,8 @@ bool Problem::RemoveVertex(std::shared_ptr<Vertex> vertex) {
     return true;
 }
 
-bool Problem::RemoveEdge(std::shared_ptr<Edge> edge) {
+bool Problem::RemoveEdge(std::shared_ptr<Edge> edge)
+{
     //check if the edge is in map_edges_
     if (edges_.find(edge->Id()) == edges_.end()) {
         // LOG(WARNING) << "The edge " << edge->Id() << " is not in the problem!" << endl;
@@ -166,9 +174,8 @@ bool Problem::RemoveEdge(std::shared_ptr<Edge> edge) {
     return true;
 }
 
-bool Problem::Solve(int iterations) {
-
-
+bool Problem::Solve(int iterations) 
+{
     if (edges_.size() == 0 || verticies_.size() == 0) {
         std::cerr << "\nCannot solve problem without edges or verticies" << std::endl;
         return false;
@@ -192,20 +199,18 @@ bool Problem::Solve(int iterations) {
         while (!oneStepSuccess && false_cnt < 10)  // 不断尝试 Lambda, 直到成功迭代一步
         {
             // setLambda
-//            AddLambdatoHessianLM();
+            //AddLambdatoHessianLM();
             // 第四步，解线性方程
             SolveLinearSystem();
-            //
-//            RemoveLambdaHessianLM();
-
+            // RemoveLambdaHessianLM();
             // 优化退出条件1： delta_x_ 很小则退出
-//            if (delta_x_.squaredNorm() <= 1e-6 || false_cnt > 10)
+            // if (delta_x_.squaredNorm() <= 1e-6 || false_cnt > 10)
             // TODO:: 退出条件还是有问题, 好多次误差都没变化了，还在迭代计算，应该搞一个误差不变了就中止
-//            if ( false_cnt > 10)
-//            {
-//                stop = true;
-//                break;
-//            }
+            // if ( false_cnt > 10)
+            // {
+            //     stop = true;
+            //     break;
+            // }
 
             // 更新状态量
             UpdateStates();
@@ -213,17 +218,17 @@ bool Problem::Solve(int iterations) {
             oneStepSuccess = IsGoodStepInLM();
             // 后续处理，
             if (oneStepSuccess) {
-//                std::cout << " get one step success\n";
+            //                std::cout << " get one step success\n";
 
                 // 在新线性化点 构建 hessian
                 MakeHessian();
                 // TODO:: 这个判断条件可以丢掉，条件 b_max <= 1e-12 很难达到，这里的阈值条件不应该用绝对值，而是相对值
-//                double b_max = 0.0;
-//                for (int i = 0; i < b_.size(); ++i) {
-//                    b_max = max(fabs(b_(i)), b_max);
-//                }
-//                // 优化退出条件2： 如果残差 b_max 已经很小了，那就退出
-//                stop = (b_max <= 1e-12);
+                // double b_max = 0.0;
+                // for (int i = 0; i < b_.size(); ++i) {
+                //     b_max = max(fabs(b_(i)), b_max);
+                // }
+                // // 优化退出条件2： 如果残差 b_max 已经很小了，那就退出
+                // stop = (b_max <= 1e-12);
                 false_cnt = 0;
             } else {
                 false_cnt ++;
@@ -234,8 +239,8 @@ bool Problem::Solve(int iterations) {
 
         // 优化退出条件3： currentChi_ 跟第一次的 chi2 相比，下降了 1e6 倍则退出
         // TODO:: 应该改成前后两次的误差已经不再变化
-//        if (sqrt(currentChi_) <= stopThresholdLM_)
-//        if (sqrt(currentChi_) < 1e-15)
+        // if (sqrt(currentChi_) <= stopThresholdLM_)
+        // if (sqrt(currentChi_) < 1e-15)
         if(last_chi_ - currentChi_ < 1e-5)
         {
             std::cout << "sqrt(currentChi_) <= stopThresholdLM_" << std::endl;
@@ -249,29 +254,32 @@ bool Problem::Solve(int iterations) {
     return true;
 }
 
-bool Problem::SolveGenericProblem(int iterations) {
+bool Problem::SolveGenericProblem(int iterations) 
+{
     return true;
 }
 
-void Problem::SetOrdering() {
-
+void Problem::SetOrdering() 
+{
     // 每次重新计数
     ordering_poses_ = 0;
     ordering_generic_ = 0;
     ordering_landmarks_ = 0;
 
     // Note:: verticies_ 是 map 类型的, 顺序是按照 id 号排序的
-    for (auto vertex: verticies_) {
-        ordering_generic_ += vertex.second->LocalDimension();  // 所有的优化变量总维数
-
-        if (problemType_ == ProblemType::SLAM_PROBLEM)    // 如果是 slam 问题，还要分别统计 pose 和 landmark 的维数，后面会对他们进行排序
+    for (auto vertex: verticies_) 
+    {
+        // 所有的优化变量总维数
+        ordering_generic_ += vertex.second->LocalDimension();
+        // 如果是 slam 问题，还要分别统计 pose 和 landmark 的维数，后面会对他们进行排序
+        if (problemType_ == ProblemType::SLAM_PROBLEM)    
         {
             AddOrderingSLAM(vertex.second);
         }
-
     }
 
-    if (problemType_ == ProblemType::SLAM_PROBLEM) {
+    if (problemType_ == ProblemType::SLAM_PROBLEM) 
+    {
         // 这里要把 landmark 的 ordering 加上 pose 的数量，就保持了 landmark 在后,而 pose 在前
         ulong all_pose_dimension = ordering_poses_;
         for (auto landmarkVertex : idx_landmark_vertices_) {
@@ -280,8 +288,7 @@ void Problem::SetOrdering() {
             );
         }
     }
-
-//    CHECK_EQ(CheckOrdering(), true);
+    // CHECK_EQ(CheckOrdering(), true);
 }
 
 bool Problem::CheckOrdering() {
@@ -305,14 +312,14 @@ void Problem::MakeHessian() {
     // 直接构造大的 H 矩阵
     ulong size = ordering_generic_;
     MatXX H(MatXX::Zero(size, size));
-    VecX b(VecX::Zero(size));
+    VecX  b(VecX::Zero(size));
 
     // TODO:: accelate, accelate, accelate
-//#ifdef USE_OPENMP
-//#pragma omp parallel for
-//#endif
-    for (auto &edge: edges_) {
-
+    //#ifdef USE_OPENMP
+    //#pragma omp parallel for
+    //#endif
+    for (auto &edge: edges_) 
+    {
         edge.second->ComputeResidual();
         edge.second->ComputeJacobians();
 
@@ -320,7 +327,8 @@ void Problem::MakeHessian() {
         auto jacobians = edge.second->Jacobians();
         auto verticies = edge.second->Verticies();
         assert(jacobians.size() == verticies.size());
-        for (size_t i = 0; i < verticies.size(); ++i) {
+        for (size_t i = 0; i < verticies.size(); ++i) 
+        {
             auto v_i = verticies[i];
             if (v_i->IsFixed()) continue;    // Hessian 里不需要添加它的信息，也就是它的雅克比为 0
 
@@ -334,7 +342,8 @@ void Problem::MakeHessian() {
             edge.second->RobustInfo(drho,robustInfo);
 
             MatXX JtW = jacobian_i.transpose() * robustInfo;
-            for (size_t j = i; j < verticies.size(); ++j) {
+            for (size_t j = i; j < verticies.size(); ++j) 
+            {
                 auto v_j = verticies[j];
 
                 if (v_j->IsFixed()) continue;
@@ -369,8 +378,10 @@ void Problem::MakeHessian() {
 
         /// 遍历所有 POSE 顶点，然后设置相应的先验维度为 0 .  fix 外参数, SET PRIOR TO ZERO
         /// landmark 没有先验
-        for (auto vertex: verticies_) {
-            if (IsPoseVertex(vertex.second) && vertex.second->IsFixed() ) {
+        for (auto vertex: verticies_) 
+        {
+            if (IsPoseVertex(vertex.second) && vertex.second->IsFixed() ) 
+            {
                 int idx = vertex.second->OrderingId();
                 int dim = vertex.second->LocalDimension();
                 H_prior_tmp.block(idx,0, dim, H_prior_tmp.cols()).setZero();
@@ -382,10 +393,7 @@ void Problem::MakeHessian() {
         Hessian_.topLeftCorner(ordering_poses_, ordering_poses_) += H_prior_tmp;
         b_.head(ordering_poses_) += b_prior_tmp;
     }
-
     delta_x_ = VecX::Zero(size);  // initial delta_x = 0_n;
-
-
 }
 
 /*

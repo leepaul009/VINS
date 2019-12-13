@@ -20,8 +20,8 @@ public:
     };
     map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> points;
     double t;
-    Matrix3d R;
-    Vector3d T;
+    Matrix3d R; // 从某帧的IMU参考系(bk)->起始帧的相机参考系(c0)的旋转
+    Vector3d T; // 从某帧的相机参考系(ck)->起始帧的相机参考系(c0)的旋转
     IntegrationBase *pre_integration;
     bool is_key_frame;
 };

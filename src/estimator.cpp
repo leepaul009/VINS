@@ -101,25 +101,31 @@ void Estimator::clearState()
     drift_correct_t = Vector3d::Zero();
 }
 
-void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const Vector3d &angular_velocity)
+void Estimator::processIMU(double dt, 
+                           const Vector3d &linear_acceleration, 
+                           const Vector3d &angular_velocity)
 {
+    // 当系统的第一个接收imu输入时，将该imu=>acc_0/gr_0，
+    // 并用IntegrationBase构造第一帧(frame_count=0)对应的预积分值，这时加速度和角速度的bias为0。
+    // 之后对于新的一帧，需要重新用IntegrationBase构造此帧(frame_count)对应的预积分值。
     if (!first_imu)
     {
         first_imu = true;
         acc_0 = linear_acceleration;
         gyr_0 = angular_velocity;
     }
-
     if (!pre_integrations[frame_count])
     {
-        pre_integrations[frame_count] = new IntegrationBase{acc_0, 
-                                                            gyr_0, 
+        pre_integrations[frame_count] = new IntegrationBase{acc_0, gyr_0, 
                                                             Bas[frame_count], 
                                                             Bgs[frame_count]};
     }
+
+    // 从第二帧开始：
+    // 在初始化的滑窗中，第一轮预积分的PVQ是基于C0坐标系的，比如：V表示对C0的相对速度。而且都包括重力。
     if (frame_count != 0)
     {
-	    // 预积分， 计算PVQ的积分增量的误差的jacobian, covariance
+        // pre_integrations[F]有两帧间的PVQ积分(有重力g影响，不包括历史帧的PVQ积分)
         pre_integrations[frame_count]->push_back(dt, linear_acceleration, angular_velocity);
         //if(solver_flag != NON_LINEAR)
         tmp_pre_integration->push_back(dt, linear_acceleration, angular_velocity);
@@ -128,20 +134,26 @@ void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const
         linear_acceleration_buf[frame_count].push_back(linear_acceleration);
         angular_velocity_buf[frame_count].push_back(angular_velocity);
 
+        // 求两个imu输入的积分求解两帧间的PVQ积分
+        // 两帧间的PVQ积分，并累加了历史帧的PVQ积分
         int j = frame_count;
         Vector3d un_acc_0 = Rs[j] * (acc_0 - Bas[j]) - g;
+
         Vector3d un_gyr = 0.5 * (gyr_0 + angular_velocity) - Bgs[j];
         Rs[j] *= Utility::deltaQ(un_gyr * dt).toRotationMatrix();
+
         Vector3d un_acc_1 = Rs[j] * (linear_acceleration - Bas[j]) - g;
         Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);
+
         Ps[j] += dt * Vs[j] + 0.5 * dt * dt * un_acc;
-        Vs[j] += dt * un_acc;
+        Vs[j] += dt * un_acc; 
     }
     acc_0 = linear_acceleration;
     gyr_0 = angular_velocity;
 }
 
-void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double header)
+void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, 
+                             double header)
 {
     //ROS_DEBUG("new image coming ------------------------------------------");
     // cout << "Adding feature points: " << image.size()<<endl;
@@ -158,8 +170,10 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     Headers[frame_count] = header;
 
     ImageFrame imageframe(image, header);
-    imageframe.pre_integration = tmp_pre_integration;
+    imageframe.pre_integration = tmp_pre_integration; // 传递指针
     all_image_frame.insert(make_pair(header, imageframe));
+    // 此处初始化的tmp_pre_integration是给下一帧用的，
+    // 这里的acc_0和gyr_0或为此帧前后两个imu输入的插值，或为和此帧同步的imu输入的值。
     tmp_pre_integration = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
 
     if (ESTIMATE_EXTRINSIC == 2) // current ESTIMATE_EXTRINSIC=0
@@ -196,7 +210,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
             if (result)
             {
                 solver_flag = NON_LINEAR;
-                solveOdometry();
+                solveOdometry(); // back end
                 slideWindow();
                 f_manager.removeFailures();
                 cout << "Initialization finish!" << endl;
@@ -242,6 +256,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         last_P0 = Ps[0];
     }
 }
+
 bool Estimator::initialStructure()
 {
     TicToc t_sfm;
@@ -299,7 +314,7 @@ bool Estimator::initialStructure()
     Matrix3d relative_R;
     Vector3d relative_T;
     int l;
-    // 计算当前帧到参考帧的R，T。参考帧：与当前帧匹配特征点较多的{关键帧，？}。
+    // 计算当前帧c_cur到参考帧c_ref的R，T。参考帧：与当前帧匹配特征点较多的{关键帧，？}。
     if (!relativePose(relative_R, relative_T, l))
     {
         cout << "Not enough features or parallax; Move device around" << endl;
@@ -356,6 +371,7 @@ bool Estimator::initialStructure()
                     Vector3d world_pts = it->second;
                     cv::Point3f pts_3(world_pts(0), world_pts(1), world_pts(2));
                     pts_3_vector.push_back(pts_3);
+
                     Vector2d img_pts = i_p.second.head<2>();
                     cv::Point2f pts_2(img_pts(0), img_pts(1));
                     pts_2_vector.push_back(pts_2);
@@ -373,15 +389,21 @@ bool Estimator::initialStructure()
             cout << " solve pnp fail!" << endl;
             return false;
         }
-        cv::Rodrigues(rvec, r);
+
         MatrixXd R_pnp, tmp_R_pnp;
+
+        cv::Rodrigues(rvec, r);
         cv::cv2eigen(r, tmp_R_pnp);
         R_pnp = tmp_R_pnp.transpose();
+
         MatrixXd T_pnp;
         cv::cv2eigen(t, T_pnp);
         T_pnp = R_pnp * (-T_pnp);
-        // frame的R/T为imu(body)坐标系到cam坐标系
-        frame_it->second.R = R_pnp * RIC[0].transpose(); // c_k+1 => c_0 & (c=>b)^T:b=>c
+        // frame.R:从bk(frame_it)到c0的旋转
+        // frame.T:从ck(frame_it)到c0的位移
+        // RIC,TIC:从相机参考系到imu参考系的旋转和位移
+        // R_pnp为某帧相机参考系Ck到C0，乘以RIC^T为k时刻imu参考系到C0
+        frame_it->second.R = R_pnp * RIC[0].transpose(); 
         frame_it->second.T = T_pnp;
     }
     if (visualInitialAlign())
@@ -406,12 +428,13 @@ bool Estimator::visualInitialAlign()
     }
 
     // change state
+    // a. 计算R[k](bk->c0：bk时刻，在c0系)
     for (int i = 0; i <= frame_count; i++)
     {
         Matrix3d Ri = all_image_frame[Headers[i]].R;
         Vector3d Pi = all_image_frame[Headers[i]].T;
-        Ps[i] = Pi;
         Rs[i] = Ri;
+        Ps[i] = Pi;
         all_image_frame[Headers[i]].is_key_frame = true;
     }
 
@@ -428,13 +451,17 @@ bool Estimator::visualInitialAlign()
     f_manager.setRic(ric);
     f_manager.triangulate(Ps, &(TIC_TMP[0]), &(RIC[0]));
 
-    double s = (x.tail<1>())(0);
+    double s = (x.tail<1>())(0); // 初始化完的x向量最后一项为尺度scale
     for (int i = 0; i <= WINDOW_SIZE; i++)
     {
         pre_integrations[i]->repropagate(Vector3d::Zero(), Bgs[i]);
     }
+
+    // b. 计算带尺度信息的Ps[k](bk->c0：bk时刻，在c0系)
     for (int i = frame_count; i >= 0; i--)
         Ps[i] = s * Ps[i] - Rs[i] * TIC[0] - (s * Ps[0] - Rs[0] * TIC[0]);
+    
+    // c. 计算Vs[k]:(bk->c0: bk时刻，在c0系)
     int kv = -1;
     map<double, ImageFrame>::iterator frame_i;
     for (frame_i = all_image_frame.begin(); frame_i != all_image_frame.end(); frame_i++)
@@ -442,9 +469,11 @@ bool Estimator::visualInitialAlign()
         if (frame_i->second.is_key_frame)
         {
             kv++;
-            Vs[kv] = frame_i->second.R * x.segment<3>(kv * 3);
+            // x.segment<3>(kv * 3) 即 v(bk->bk: bk时刻，在bk系)
+            Vs[kv] = frame_i->second.R * x.segment<3>(kv * 3); 
         }
     }
+
     for (auto &it_per_id : f_manager.feature)
     {
         it_per_id.used_num = it_per_id.feature_per_frame.size();
@@ -453,12 +482,16 @@ bool Estimator::visualInitialAlign()
         it_per_id.estimated_depth *= s;
     }
 
+    // 求gc0到重力的旋转？？，并消除了yaw方向的旋转？？，只考虑pitch和roll？？
     Matrix3d R0 = Utility::g2R(g);
     double yaw = Utility::R2ypr(R0 * Rs[0]).x();
-    R0 = Utility::ypr2R(Eigen::Vector3d{-yaw, 0, 0}) * R0;
-    g = R0 * g;
+    R0 = Utility::ypr2R(Eigen::Vector3d{-yaw, 0, 0}) * R0; // bk->w的旋转
+    g = R0 * g; 
     //Matrix3d rot_diff = R0 * Rs[0].transpose();
+
+    // 相对于c0系的PVQ转到相对于world系的PVQ
     Matrix3d rot_diff = R0;
+    // PVQ为bk在w系的值
     for (int i = 0; i <= frame_count; i++)
     {
         Ps[i] = rot_diff * Ps[i];
@@ -467,7 +500,6 @@ bool Estimator::visualInitialAlign()
     }
     //ROS_DEBUG_STREAM("g0     " << g.transpose());
     //ROS_DEBUG_STREAM("my R0  " << Utility::R2ypr(Rs[0]).transpose());
-
     return true;
 }
 
@@ -522,13 +554,16 @@ void Estimator::solveOdometry()
     }
 }
 
+// 构造待优化变量
 void Estimator::vector2double()
 {
     for (int i = 0; i <= WINDOW_SIZE; i++)
     {
+        // pose in world frame
         para_Pose[i][0] = Ps[i].x();
         para_Pose[i][1] = Ps[i].y();
         para_Pose[i][2] = Ps[i].z();
+
         Quaterniond q{Rs[i]};
         para_Pose[i][3] = q.x();
         para_Pose[i][4] = q.y();
@@ -539,6 +574,7 @@ void Estimator::vector2double()
         para_SpeedBias[i][1] = Vs[i].y();
         para_SpeedBias[i][2] = Vs[i].z();
 
+        // bias in body frame
         para_SpeedBias[i][3] = Bas[i].x();
         para_SpeedBias[i][4] = Bas[i].y();
         para_SpeedBias[i][5] = Bas[i].z();
@@ -847,6 +883,7 @@ void Estimator::MargOldFrame()
     errprior_ = problem.GetErrPrior();
     Jprior_inv_ = problem.GetJtPrior();
 }
+
 void Estimator::MargNewFrame()
 {
 
@@ -919,6 +956,7 @@ void Estimator::MargNewFrame()
     errprior_ = problem.GetErrPrior();
     Jprior_inv_ = problem.GetJtPrior();
 }
+
 void Estimator::problemSolve()
 {
     backend::LossFunction *lossfunction;
@@ -935,7 +973,8 @@ void Estimator::problemSolve()
     shared_ptr<backend::VertexPose> vertexExt(new backend::VertexPose());
     {
         Eigen::VectorXd pose(7);
-        pose << para_Ex_Pose[0][0], para_Ex_Pose[0][1], para_Ex_Pose[0][2], para_Ex_Pose[0][3], para_Ex_Pose[0][4], para_Ex_Pose[0][5], para_Ex_Pose[0][6];
+        pose << para_Ex_Pose[0][0], para_Ex_Pose[0][1], para_Ex_Pose[0][2], 
+                para_Ex_Pose[0][3], para_Ex_Pose[0][4], para_Ex_Pose[0][5], para_Ex_Pose[0][6];
         vertexExt->SetParameters(pose);
 
         if (!ESTIMATE_EXTRINSIC)
@@ -955,21 +994,23 @@ void Estimator::problemSolve()
     {
         shared_ptr<backend::VertexPose> vertexCam(new backend::VertexPose());
         Eigen::VectorXd pose(7);
-        pose << para_Pose[i][0], para_Pose[i][1], para_Pose[i][2], para_Pose[i][3], para_Pose[i][4], para_Pose[i][5], para_Pose[i][6];
+        pose << para_Pose[i][0], para_Pose[i][1], para_Pose[i][2], 
+                para_Pose[i][3], para_Pose[i][4], para_Pose[i][5], para_Pose[i][6];
         vertexCam->SetParameters(pose);
+
         vertexCams_vec.push_back(vertexCam);
         problem.AddVertex(vertexCam);
-        pose_dim += vertexCam->LocalDimension();
+        pose_dim += vertexCam->LocalDimension(); // 6 ? what's local dimension
 
         shared_ptr<backend::VertexSpeedBias> vertexVB(new backend::VertexSpeedBias());
         Eigen::VectorXd vb(9);
         vb << para_SpeedBias[i][0], para_SpeedBias[i][1], para_SpeedBias[i][2],
-            para_SpeedBias[i][3], para_SpeedBias[i][4], para_SpeedBias[i][5],
-            para_SpeedBias[i][6], para_SpeedBias[i][7], para_SpeedBias[i][8];
+              para_SpeedBias[i][3], para_SpeedBias[i][4], para_SpeedBias[i][5],
+              para_SpeedBias[i][6], para_SpeedBias[i][7], para_SpeedBias[i][8];
         vertexVB->SetParameters(vb);
         vertexVB_vec.push_back(vertexVB);
         problem.AddVertex(vertexVB);
-        pose_dim += vertexVB->LocalDimension();
+        pose_dim += vertexVB->LocalDimension(); // 9
     }
 
     // IMU
@@ -981,10 +1022,13 @@ void Estimator::problemSolve()
 
         std::shared_ptr<backend::EdgeImu> imuEdge(new backend::EdgeImu(pre_integrations[j]));
         std::vector<std::shared_ptr<backend::Vertex>> edge_vertex;
+
         edge_vertex.push_back(vertexCams_vec[i]);
         edge_vertex.push_back(vertexVB_vec[i]);
+
         edge_vertex.push_back(vertexCams_vec[j]);
         edge_vertex.push_back(vertexVB_vec[j]);
+        
         imuEdge->SetVertex(edge_vertex);
         problem.AddEdge(imuEdge);
     }

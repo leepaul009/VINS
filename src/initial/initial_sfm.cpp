@@ -147,12 +147,13 @@ bool GlobalSFM::construct(int frame_num,
 	//cout << "set 0 and " << l << " as known " << endl;
 	// have relative_r relative_t
 	// intial two view
-	// 假设q_RefKF，q_CurF都是world坐标系下的（Rotation:Frame2world）
+	// 以下所有计算以参考帧为原点。
 	q[l].w() = 1;
 	q[l].x() = 0;
 	q[l].y() = 0;
 	q[l].z() = 0;
 	T[l].setZero();
+	// 当前帧到参考帧的R(c_ref, c_cur)
 	q[frame_num - 1] = q[l] * Quaterniond(relative_R);
 	T[frame_num - 1] = relative_T;
 	//cout << "init q_l " << q[l].w() << " " << q[l].vec().transpose() << endl;
