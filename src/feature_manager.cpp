@@ -53,6 +53,7 @@ bool FeatureManager::addFeatureCheckParallax(
     double parallax_sum = 0;
     int parallax_num = 0;
     last_track_num = 0;
+    
     for (auto &id_pts : image) // 遍历特征点
     {
         FeaturePerFrame f_per_fra(id_pts.second[0].second, // 3D点对于帧的信息
@@ -60,9 +61,7 @@ bool FeatureManager::addFeatureCheckParallax(
 
         int feature_id = id_pts.first;
         auto it = find_if(feature.begin(), feature.end(), [feature_id](const FeaturePerId &it)
-                          {
-            return it.feature_id == feature_id;
-                          });
+        { return it.feature_id == feature_id; });
 
         if (it == feature.end())
         {

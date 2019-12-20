@@ -192,11 +192,11 @@ private:
     HashVertexIdToEdge vertexToEdge_;
 
     /// Ordering related
-    ulong ordering_poses_ = 0;
-    ulong ordering_landmarks_ = 0;
-    ulong ordering_generic_ = 0;
-    std::map<unsigned long, std::shared_ptr<Vertex>> idx_pose_vertices_;        // 以ordering排序的pose顶点
-    std::map<unsigned long, std::shared_ptr<Vertex>> idx_landmark_vertices_;    // 以ordering排序的landmark顶点
+    ulong ordering_poses_ = 0;     // sum of dimension for vertex pose, speed & bias
+    ulong ordering_landmarks_ = 0; // sum of dimension for VertexInverseDepth
+    ulong ordering_generic_ = 0;   // sum of dimension for all vertex
+    std::map<unsigned long, std::shared_ptr<Vertex>> idx_pose_vertices_;     // 以ordering排序的pose顶点
+    std::map<unsigned long, std::shared_ptr<Vertex>> idx_landmark_vertices_; // 以ordering排序的landmark顶点
 
     // verticies need to marg. <Ordering_id_, Vertex>
     HashVertex verticies_marg_;

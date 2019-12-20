@@ -38,8 +38,8 @@ void EdgeImu::ComputeResidual()
     SetInformation(pre_integration_->covariance.inverse());
 }
 
-void EdgeImu::ComputeJacobians() {
-
+void EdgeImu::ComputeJacobians() 
+{
     VecX param_0 = verticies_[0]->Parameters();
     Qd Qi(param_0[6], param_0[3], param_0[4], param_0[5]);
     Vec3 Pi = param_0.head<3>();
@@ -72,22 +72,26 @@ void EdgeImu::ComputeJacobians() {
         // ROS_WARN("numerical unstable in preintegration");
     }
 
-    // 残差对P,Q的jacobians
+    // 残差对P,Q的jacobians, row:residual col:state
     // if (jacobians[0])
     {
         Eigen::Matrix<double, 15, 6, Eigen::RowMajor> jacobian_pose_i;
         jacobian_pose_i.setZero();
 
-        // J(0, 0)
+        // J(0, 0) P增量误差/P(w,bk)误差
         jacobian_pose_i.block<3, 3>(O_P, O_P) = -Qi.inverse().toRotationMatrix();
-        // J(0, 3)
-        jacobian_pose_i.block<3, 3>(O_P, O_R) = Utility::skewSymmetric(Qi.inverse() * (0.5 * G * sum_dt * sum_dt + Pj - Pi - Vi * sum_dt));
+        // J(0, 3) P增量误差/Q（w,bk)误差
+        jacobian_pose_i.block<3, 3>(O_P, O_R)
+            = Utility::skewSymmetric(Qi.inverse() * (0.5 * G * sum_dt * sum_dt + Pj - Pi - Vi * sum_dt));
 
-        Eigen::Quaterniond corrected_delta_q = pre_integration_->delta_q * Utility::deltaQ(dq_dbg * (Bgi - pre_integration_->linearized_bg));
-        // J(3, 3)
-        jacobian_pose_i.block<3, 3>(O_R, O_R) = -(Utility::Qleft(Qj.inverse() * Qi) * Utility::Qright(corrected_delta_q))
-                                                    .bottomRightCorner<3, 3>();
-        // J(6, 3)
+        // J(3, 3) Q增量误差/Q（w,bk)误差
+        // for initial window: no difference between frame i and j.
+        Eigen::Quaterniond corrected_delta_q 
+            = pre_integration_->delta_q * Utility::deltaQ(dq_dbg * (Bgi - pre_integration_->linearized_bg));
+        jacobian_pose_i.block<3, 3>(O_R, O_R) 
+            = -( Utility::Qleft(Qj.inverse() * Qi) * Utility::Qright(corrected_delta_q) )
+                    .bottomRightCorner<3, 3>();
+        // J(6, 3) V增量误差/Q（w,bk)误差
         jacobian_pose_i.block<3, 3>(O_V, O_R) = Utility::skewSymmetric(Qi.inverse() * (G * sum_dt + Vj - Vi));
         // jacobian_pose_i = sqrt_info * jacobian_pose_i;
 
@@ -108,8 +112,10 @@ void EdgeImu::ComputeJacobians() {
 
         //Eigen::Quaterniond corrected_delta_q = pre_integration->delta_q * Utility::deltaQ(dq_dbg * (Bgi - pre_integration->linearized_bg));
         //jacobian_speedbias_i.block<3, 3>(O_R, O_BG - O_V) = -Utility::Qleft(Qj.inverse() * Qi * corrected_delta_q).bottomRightCorner<3, 3>() * dq_dbg;
-        jacobian_speedbias_i.block<3, 3>(O_R, O_BG - O_V) = -Utility::Qleft(Qj.inverse() * Qi * pre_integration_->delta_q)
-                                                                .bottomRightCorner<3, 3>() * dq_dbg;
+        // Q增量误差/ba（bk?,bk)误差
+        jacobian_speedbias_i.block<3, 3>(O_R, O_BG - O_V)
+            = -Utility::Qleft(Qj.inverse() * Qi * pre_integration_->delta_q)
+                    .bottomRightCorner<3, 3>() * dq_dbg;
         jacobian_speedbias_i.block<3, 3>(O_V, O_V - O_V) = -Qi.inverse().toRotationMatrix();
         jacobian_speedbias_i.block<3, 3>(O_V, O_BA - O_V) = -dv_dba;
         jacobian_speedbias_i.block<3, 3>(O_V, O_BG - O_V) = -dv_dbg;

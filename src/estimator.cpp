@@ -152,8 +152,9 @@ void Estimator::processIMU(double dt,
     gyr_0 = angular_velocity;
 }
 
-void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, 
-                             double header)
+void Estimator::processImage(
+    const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, 
+    double header)
 {
     //ROS_DEBUG("new image coming ------------------------------------------");
     // cout << "Adding feature points: " << image.size()<<endl;
@@ -195,6 +196,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         }
     }
 
+    // 初始化成功后 solver_flag 会被更新为 NON_LINEAR, 然后进行后端优化。
     if (solver_flag == INITIAL)
     {
 		// 积累完一个滑窗数量的帧后， 开始初始化
@@ -214,6 +216,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
                 slideWindow();
                 f_manager.removeFailures();
                 cout << "Initialization finish!" << endl;
+                // keep first and last frame of cur window
                 last_R = Rs[WINDOW_SIZE];
                 last_P = Ps[WINDOW_SIZE];
                 last_R0 = Rs[0];
@@ -420,6 +423,7 @@ bool Estimator::visualInitialAlign()
     TicToc t_g;
     VectorXd x;
     //solve scale
+    // 在第一个window即初始化window，Bags都是相同的。
     bool result = VisualIMUAlignment(all_image_frame, Bgs, g, x);
     if (!result)
     {
@@ -886,7 +890,6 @@ void Estimator::MargOldFrame()
 
 void Estimator::MargNewFrame()
 {
-
     // step1. 构建 problem
     backend::Problem problem(backend::Problem::ProblemType::SLAM_PROBLEM);
     vector<shared_ptr<backend::VertexPose>> vertexCams_vec;
@@ -992,6 +995,7 @@ void Estimator::problemSolve()
 
     for (int i = 0; i < WINDOW_SIZE + 1; i++)
     {
+        // pose (T, R)
         shared_ptr<backend::VertexPose> vertexCam(new backend::VertexPose());
         Eigen::VectorXd pose(7);
         pose << para_Pose[i][0], para_Pose[i][1], para_Pose[i][2], 
@@ -1002,6 +1006,7 @@ void Estimator::problemSolve()
         problem.AddVertex(vertexCam);
         pose_dim += vertexCam->LocalDimension(); // 6 ? what's local dimension
 
+        // vel, acc bias and gyr bias
         shared_ptr<backend::VertexSpeedBias> vertexVB(new backend::VertexSpeedBias());
         Eigen::VectorXd vb(9);
         vb << para_SpeedBias[i][0], para_SpeedBias[i][1], para_SpeedBias[i][2],
@@ -1269,6 +1274,7 @@ void Estimator::slideWindow()
     {
         if (frame_count == WINDOW_SIZE)
         {
+            // dt_buf[frame][] stores img header
             for (unsigned int i = 0; i < dt_buf[frame_count].size(); i++)
             {
                 double tmp_dt = dt_buf[frame_count][i];

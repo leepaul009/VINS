@@ -47,10 +47,12 @@ void FeatureTracker::setMask()
     for (unsigned int i = 0; i < forw_pts.size(); i++)
         cnt_pts_id.push_back(make_pair(track_cnt[i], make_pair(forw_pts[i], ids[i])));
 
-    sort(cnt_pts_id.begin(), cnt_pts_id.end(), [](const pair<int, pair<cv::Point2f, int>> &a, const pair<int, pair<cv::Point2f, int>> &b)
-         {
+    sort(cnt_pts_id.begin(), cnt_pts_id.end(), 
+        [](const pair<int, pair<cv::Point2f, int>> &a, 
+           const pair<int, pair<cv::Point2f, int>> &b)
+        {
             return a.first > b.first;
-         });
+        });
 
     forw_pts.clear();
     ids.clear();
@@ -63,6 +65,8 @@ void FeatureTracker::setMask()
             forw_pts.push_back(it.second.first);
             ids.push_back(it.second.second);
             track_cnt.push_back(it.first);
+            // mask cur pt and its nearby area, 
+            // then next pt in this area will be remove from forw_pts
             cv::circle(mask, it.second.first, MIN_DIST, 0, -1);
         }
     }
@@ -110,16 +114,22 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
         TicToc t_o;
         vector<uchar> status;
         vector<float> err;
-        cv::calcOpticalFlowPyrLK(cur_img, forw_img, cur_pts, forw_pts, status, err, cv::Size(21, 21), 3);
+        
+        cv::calcOpticalFlowPyrLK(cur_img, forw_img, // prev img, next img(same type, size to prev)
+                                 cur_pts, // input feats in prev img
+                                 forw_pts, // output: new positions(in 2nd img) of input feats 
+                                 status, err, // status=1 if corresponding features has been found
+                                 cv::Size(21, 21), //size of the search window
+                                 3); 
 
         for (int i = 0; i < int(forw_pts.size()); i++)
-            if (status[i] && !inBorder(forw_pts[i]))
+            if (status[i] && !inBorder(forw_pts[i])) // found but outside border
                 status[i] = 0;
-        reduceVector(prev_pts, status);
-        reduceVector(cur_pts, status);
-        reduceVector(forw_pts, status);
+        reduceVector(prev_pts, status); // prev of prev img pts
+        reduceVector(cur_pts, status); // prev img pts
+        reduceVector(forw_pts, status); // cur img pts
         reduceVector(ids, status);
-        reduceVector(cur_un_pts, status);
+        reduceVector(cur_un_pts, status); // 3D pt (in cam coord) in prev img
         reduceVector(track_cnt, status);
         //ROS_DEBUG("temporal optical flow costs: %fms", t_o.toc());
     }
@@ -129,14 +139,17 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
 
     if (PUB_THIS_FRAME)
     {
+        // remove outliner points tracked
         rejectWithF();
         //ROS_DEBUG("set mask begins");
         TicToc t_m;
+        // remove too closed points tracked
         setMask();
         //ROS_DEBUG("set mask costs %fms", t_m.toc());
 
         //ROS_DEBUG("detect feature begins");
         TicToc t_t;
+        // make sure points less than 150
         int n_max_cnt = MAX_CNT - static_cast<int>(forw_pts.size());
         if (n_max_cnt > 0)
         {
@@ -146,6 +159,9 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
                 cout << "mask type wrong " << endl;
             if (mask.size() != forw_img.size())
                 cout << "wrong size " << endl;
+
+            // Determines strong corners on an image. output: n_pts
+            // in 2nd round, the corners are new rather than tracked points(filtered)
             cv::goodFeaturesToTrack(forw_img, n_pts, MAX_CNT - forw_pts.size(), 0.01, MIN_DIST, mask);
         }
         else
@@ -162,17 +178,21 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
     prev_un_pts = cur_un_pts;
     cur_img = forw_img;
     cur_pts = forw_pts;
+
+    // calculate cur_un_pts (3D pt in camera coordinate)
     undistortedPoints();
     prev_time = cur_time;
 }
 
+// check outliers by computing fundamental mat 
 void FeatureTracker::rejectWithF()
 {
-    if (forw_pts.size() >= 8)
+    if (forw_pts.size() >= 8) // if valid tracked pt more than 8
     {
         //ROS_DEBUG("FM ransac begins");
         TicToc t_f;
         vector<cv::Point2f> un_cur_pts(cur_pts.size()), un_forw_pts(forw_pts.size());
+
         for (unsigned int i = 0; i < cur_pts.size(); i++)
         {
             Eigen::Vector3d tmp_p;
@@ -188,7 +208,9 @@ void FeatureTracker::rejectWithF()
         }
 
         vector<uchar> status;
-        cv::findFundamentalMat(un_cur_pts, un_forw_pts, cv::FM_RANSAC, F_THRESHOLD, 0.99, status);
+        cv::findFundamentalMat(un_cur_pts, un_forw_pts, // img pts
+                               cv::FM_RANSAC, F_THRESHOLD, 0.99, 
+                               status); // set to 0 for outliers and to 1 for the other points
         int size_a = cur_pts.size();
         reduceVector(prev_pts, status);
         reduceVector(cur_pts, status);
@@ -260,6 +282,7 @@ void FeatureTracker::undistortedPoints()
     cur_un_pts.clear();
     cur_un_pts_map.clear();
     //cv::undistortPoints(cur_pts, un_pts, K, cv::Mat());
+    // for each corner
     for (unsigned int i = 0; i < cur_pts.size(); i++)
     {
         Eigen::Vector2d a(cur_pts[i].x, cur_pts[i].y);

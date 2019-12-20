@@ -24,6 +24,7 @@ public:
     CameraPtr generateCameraFromYamlFile(const std::string& filename);
 
 private:
+    // static declaration
     static boost::shared_ptr<CameraFactory> m_instance;
 };
 

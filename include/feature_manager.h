@@ -31,9 +31,9 @@ public:
     cur_td = td;
   }
   double cur_td;
-  Vector3d point; // 对于Camera Frame（以光心为原点）的归一化平面坐标
+  Vector3d point; // 归一化3D pts（Camera Frame,以光心为原点）
   Vector2d uv;
-  Vector2d velocity; // 如何得到的？？什么坐标下？？
+  Vector2d velocity; // vel of matched 3D pts between two frames
   double z;
   bool is_used;
   double parallax;
@@ -42,12 +42,13 @@ public:
   double dep_gradient;
 };
 
+// 3D点
 class FeaturePerId
 {
 public:
   const int feature_id;
   int start_frame;
-  // 此3D点的observations
+  // 此3D点在observations frame上的3D坐标/img坐标等
   vector<FeaturePerFrame> feature_per_frame;
 
   int used_num;
@@ -92,7 +93,7 @@ public:
   void removeBack();
   void removeFront(int frame_count);
   void removeOutlier();
-  list<FeaturePerId> feature;
+  list<FeaturePerId> feature; //类似于3D点
   int last_track_num;
 
 private:

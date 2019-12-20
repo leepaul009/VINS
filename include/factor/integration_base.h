@@ -200,6 +200,12 @@ class IntegrationBase
         gyr_0 = gyr_1;  
     }
 
+    /*
+    * 1) Init window:
+    *       PQV, Ba and Bg for frame i and j come from visual based init.
+    *       Such init includes sfm, vel, scale and gravity.
+    * 2) Tracking:
+    */
     Eigen::Matrix<double, 15, 1> evaluate(const Eigen::Vector3d    &Pi, 
                                           const Eigen::Quaterniond &Qi, 
                                           const Eigen::Vector3d    &Vi, 
@@ -213,20 +219,20 @@ class IntegrationBase
     {
         Eigen::Matrix<double, 15, 1> residuals;
 
-        Eigen::Matrix3d dp_dba = jacobian.block<3, 3>(O_P, O_BA);
-        Eigen::Matrix3d dp_dbg = jacobian.block<3, 3>(O_P, O_BG);
+        Eigen::Matrix3d dp_dba = jacobian.block<3, 3>(O_P, O_BA); // J(0,9)
+        Eigen::Matrix3d dp_dbg = jacobian.block<3, 3>(O_P, O_BG); // J(0,12)
 
-        Eigen::Matrix3d dq_dbg = jacobian.block<3, 3>(O_R, O_BG);
+        Eigen::Matrix3d dq_dbg = jacobian.block<3, 3>(O_R, O_BG); // J(3,12)
 
-        Eigen::Matrix3d dv_dba = jacobian.block<3, 3>(O_V, O_BA);
-        Eigen::Matrix3d dv_dbg = jacobian.block<3, 3>(O_V, O_BG);
+        Eigen::Matrix3d dv_dba = jacobian.block<3, 3>(O_V, O_BA); // J(6,9)
+        Eigen::Matrix3d dv_dbg = jacobian.block<3, 3>(O_V, O_BG); // J(6,12)
 
         Eigen::Vector3d dba = Bai - linearized_ba;
         Eigen::Vector3d dbg = Bgi - linearized_bg;
 
         Eigen::Quaterniond corrected_delta_q = delta_q * Utility::deltaQ(dq_dbg * dbg);
-        Eigen::Vector3d corrected_delta_v = delta_v + dv_dba * dba + dv_dbg * dbg;
-        Eigen::Vector3d corrected_delta_p = delta_p + dp_dba * dba + dp_dbg * dbg;
+        Eigen::Vector3d    corrected_delta_v = delta_v + dv_dba * dba + dv_dbg * dbg;
+        Eigen::Vector3d    corrected_delta_p = delta_p + dp_dba * dba + dp_dbg * dbg;
 
         residuals.block<3, 1>(O_P, 0) = Qi.inverse() * (0.5 * G * sum_dt * sum_dt + Pj - Pi - Vi * sum_dt) - corrected_delta_p;
         residuals.block<3, 1>(O_R, 0) = 2 * (corrected_delta_q.inverse() * (Qi.inverse() * Qj)).vec();

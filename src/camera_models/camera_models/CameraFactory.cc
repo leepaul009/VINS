@@ -13,12 +13,11 @@
 namespace camodocal
 {
 
+// out-of-class definition
 boost::shared_ptr<CameraFactory> CameraFactory::m_instance;
 
 CameraFactory::CameraFactory()
-{
-
-}
+{}
 
 boost::shared_ptr<CameraFactory>
 CameraFactory::instance(void)
@@ -27,12 +26,10 @@ CameraFactory::instance(void)
     {
         m_instance.reset(new CameraFactory);
     }
-
     return m_instance;
 }
 
-CameraPtr
-CameraFactory::generateCamera(Camera::ModelType modelType,
+CameraPtr CameraFactory::generateCamera(Camera::ModelType modelType,
                               const std::string& cameraName,
                               cv::Size imageSize) const
 {
@@ -86,8 +83,7 @@ CameraFactory::generateCamera(Camera::ModelType modelType,
     }
 }
 
-CameraPtr
-CameraFactory::generateCameraFromYamlFile(const std::string& filename)
+CameraPtr CameraFactory::generateCameraFromYamlFile(const std::string& filename)
 {
     cv::FileStorage fs(filename, cv::FileStorage::READ);
 
@@ -127,43 +123,43 @@ CameraFactory::generateCameraFromYamlFile(const std::string& filename)
 
     switch (modelType)
     {
-    case Camera::KANNALA_BRANDT:
-    {
-        EquidistantCameraPtr camera(new EquidistantCamera);
+        case Camera::KANNALA_BRANDT:
+        {
+            EquidistantCameraPtr camera(new EquidistantCamera);
 
-        EquidistantCamera::Parameters params = camera->getParameters();
-        params.readFromYamlFile(filename);
-        camera->setParameters(params);
-        return camera;
-    }
-    case Camera::PINHOLE:
-    {
-        PinholeCameraPtr camera(new PinholeCamera);
+            EquidistantCamera::Parameters params = camera->getParameters();
+            params.readFromYamlFile(filename);
+            camera->setParameters(params);
+            return camera;
+        }
+        case Camera::PINHOLE:
+        {
+            PinholeCameraPtr camera(new PinholeCamera);
 
-        PinholeCamera::Parameters params = camera->getParameters();
-        params.readFromYamlFile(filename);
-        camera->setParameters(params);
-        return camera;
-    }
-    case Camera::SCARAMUZZA:
-    {
-        OCAMCameraPtr camera(new OCAMCamera);
+            PinholeCamera::Parameters params = camera->getParameters();
+            params.readFromYamlFile(filename);
+            camera->setParameters(params);
+            return camera;
+        }
+        case Camera::SCARAMUZZA:
+        {
+            OCAMCameraPtr camera(new OCAMCamera);
 
-        OCAMCamera::Parameters params = camera->getParameters();
-        params.readFromYamlFile(filename);
-        camera->setParameters(params);
-        return camera;
-    }
-    case Camera::MEI:
-    default:
-    {
-        CataCameraPtr camera(new CataCamera);
+            OCAMCamera::Parameters params = camera->getParameters();
+            params.readFromYamlFile(filename);
+            camera->setParameters(params);
+            return camera;
+        }
+        case Camera::MEI:
+        default:
+        {
+            CataCameraPtr camera(new CataCamera);
 
-        CataCamera::Parameters params = camera->getParameters();
-        params.readFromYamlFile(filename);
-        camera->setParameters(params);
-        return camera;
-    }
+            CataCamera::Parameters params = camera->getParameters();
+            params.readFromYamlFile(filename);
+            camera->setParameters(params);
+            return camera;
+        }
     }
 
     return CameraPtr();

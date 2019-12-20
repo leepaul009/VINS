@@ -8,6 +8,7 @@
 class Utility
 {
   public:
+    // create Quaternion with angular
     template <typename Derived>
     static Eigen::Quaternion<typename Derived::Scalar> deltaQ(const Eigen::MatrixBase<Derived> &theta)
     {

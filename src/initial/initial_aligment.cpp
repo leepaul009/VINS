@@ -36,6 +36,7 @@ void solveGyroscopeBias(map<double, ImageFrame> &all_image_frame, Vector3d* Bgs)
     for (frame_i = all_image_frame.begin(); next(frame_i) != all_image_frame.end( ); frame_i++)
     {
         frame_j = next(frame_i);
+        // 更新frame的pre_integration。
         frame_j->second.pre_integration->repropagate(Vector3d::Zero(), Bgs[0]);
     }
 }
@@ -128,6 +129,7 @@ void RefineGravity(map<double, ImageFrame> &all_image_frame, Vector3d &g, Vector
         x = A.ldlt().solve(b);
         VectorXd dg = x.segment<2>(n_state - 3); // dg: w1, w2
         // (g0 + b * w)单位向量 * 向量G的模长
+        // 似乎在递归地优化真实重力的方向。
         g0 = (g0 + lxly * dg).normalized() * G.norm(); 
         //double s = x(n_state - 1);
     }   

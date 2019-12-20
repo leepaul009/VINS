@@ -92,6 +92,7 @@ void System::PubImageData(double dStampSec, Mat &img)
 
     TicToc t_r;
     // cout << "3 PubImageData t : " << dStampSec << endl;
+    // track even if PUB_THIS_FRAME = false
     trackerData[0].readImage(img, dStampSec);
 
     for (unsigned int i = 0;; i++)
@@ -114,19 +115,25 @@ void System::PubImageData(double dStampSec, Mat &img)
             auto &cur_pts = trackerData[i].cur_pts;
             auto &ids = trackerData[i].ids;
             auto &pts_velocity = trackerData[i].pts_velocity;
+
             for (unsigned int j = 0; j < ids.size(); j++)
             {
                 if (trackerData[i].track_cnt[j] > 1)
                 {
                     int p_id = ids[j];
                     hash_ids[i].insert(p_id);
+
+                    // 3D point 相机光心坐标系
                     double x = un_pts[j].x;
                     double y = un_pts[j].y;
                     double z = 1;
-                    feature_points->points.push_back(Vector3d(x, y, z));
+                    feature_points->points.push_back(Vector3d(x, y, z)); // cur_un_pts
                     feature_points->id_of_point.push_back(p_id * NUM_OF_CAM + i);
+
+                    // 2D point 像素坐标系
                     feature_points->u_of_point.push_back(cur_pts[j].x);
                     feature_points->v_of_point.push_back(cur_pts[j].y);
+
                     feature_points->velocity_x_of_point.push_back(pts_velocity[j].x);
                     feature_points->velocity_y_of_point.push_back(pts_velocity[j].y);
                 }
@@ -149,25 +156,23 @@ void System::PubImageData(double dStampSec, Mat &img)
             }
         }
     }
-
-#ifdef __linux__
-    cv::Mat show_img;
-	cv::cvtColor(img, show_img, CV_GRAY2RGB);
-	if (SHOW_TRACK)
-	{
-		for (unsigned int j = 0; j < trackerData[0].cur_pts.size(); j++)
+    #ifdef __linux__
+        cv::Mat show_img;
+        cv::cvtColor(img, show_img, CV_GRAY2RGB);
+        if (SHOW_TRACK)
         {
-			double len = min(1.0, 1.0 * trackerData[0].track_cnt[j] / WINDOW_SIZE);
-			cv::circle(show_img, trackerData[0].cur_pts[j], 2, cv::Scalar(255 * (1 - len), 0, 255 * len), 2);
-		}
+            for (unsigned int j = 0; j < trackerData[0].cur_pts.size(); j++)
+            {
+                double len = min(1.0, 1.0 * trackerData[0].track_cnt[j] / WINDOW_SIZE);
+                cv::circle(show_img, trackerData[0].cur_pts[j], 2, cv::Scalar(255 * (1 - len), 0, 255 * len), 2);
+            }
 
-        cv::namedWindow("IMAGE", CV_WINDOW_AUTOSIZE);
-		cv::imshow("IMAGE", show_img);
-        cv::waitKey(1);
-	}
-#endif    
-    // cout << "5 PubImage" << endl;
-    
+            cv::namedWindow("IMAGE", CV_WINDOW_AUTOSIZE);
+            cv::imshow("IMAGE", show_img);
+            cv::waitKey(1);
+        }
+    #endif    
+    // cout << "5 PubImage" << endl; 
 }
 
 // ImuConstPtr： 惯导数据{时间， 加速度向量， 角速度ImuConstPtr}
@@ -273,10 +278,12 @@ void System::ProcessBackEnd()
         }
         lk.unlock();
         m_estimator.lock();
+
         for (auto &measurement : measurements)
         {
             auto img_msg = measurement.second;
             double dx = 0, dy = 0, dz = 0, rx = 0, ry = 0, rz = 0;
+
             // 帧间的所有imu输入：第一个imu一定在前一阵之后或同步，
             // 最后一个imu或和当前帧之后或同步。
             for (auto &imu_msg : measurement.first)
@@ -322,8 +329,8 @@ void System::ProcessBackEnd()
 
             // cout << "processing vision data with stamp:" << img_msg->header 
             //     << " img_msg->points.size: "<< img_msg->points.size() << endl;
-
             // TicToc t_s;
+
             map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> image;
             for (unsigned int i = 0; i < img_msg->points.size(); i++) // 当前帧特征点数量
             {
@@ -343,6 +350,7 @@ void System::ProcessBackEnd()
                 image[feature_id].emplace_back(camera_id, xyz_uv_velocity);
             }
             TicToc t_processImage;
+
 			// 1.初始化： 需要进行多次processImage，积累10帧即1个滑窗
             // 2.正常：
             estimator.processImage(image, img_msg->header);
@@ -358,7 +366,8 @@ void System::ProcessBackEnd()
                 cout << "1 BackEnd processImage dt: " << fixed << t_processImage.toc() << " stamp: " <<  dStamp << " p_wi: " << p_wi.transpose() << endl;
                 ofs_pose << fixed << dStamp << " " << p_wi.transpose() << " " << q_wi.coeffs().transpose() << endl;
             }
-        }
+        } // loop window
+        
         m_estimator.unlock();
     }
 }

@@ -465,6 +465,9 @@ PinholeCamera::liftProjective(const Eigen::Vector2d& p, Eigen::Vector3d& P) cons
     //double lambda;
 
     // Lift points to normalised plane
+    // (u, v, 1) => (X, Y, 1)
+    // X = u/fx - cx/fx
+    // Y = v/fy - cy/fy
     mx_d = m_inv_K11 * p(0) + m_inv_K13;
     my_d = m_inv_K22 * p(1) + m_inv_K23;
 

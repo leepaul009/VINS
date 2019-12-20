@@ -8,8 +8,8 @@ output_path: "/home/hyj/slam_course_vins"
 #camera calibration 
 model_type: PINHOLE
 camera_name: camera
-image_width: 752
-image_height: 480
+image_width: 752  # COL
+image_height: 480 # ROW
 distortion_parameters:
    k1: -2.917e-01
    k2: 8.228e-02
