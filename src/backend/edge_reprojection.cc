@@ -16,7 +16,7 @@ namespace backend {
     */
 
 void EdgeReprojection::ComputeResidual() {
-//    std::cout << pts_i_.transpose() <<" "<<pts_j_.transpose()  <<std::endl;
+    //    std::cout << pts_i_.transpose() <<" "<<pts_j_.transpose()  <<std::endl;
 
     double inv_dep_i = verticies_[0]->Parameters()[0];
 
@@ -39,8 +39,9 @@ void EdgeReprojection::ComputeResidual() {
     Vec3 pts_camera_j = qic.inverse() * (pts_imu_j - tic);
 
     double dep_j = pts_camera_j.z();
+    // reproject to project ray coordinate(of camera j frame)
     residual_ = (pts_camera_j / dep_j).head<2>() - pts_j_.head<2>();   /// J^t * J * delta_x = - J^t * r
-//    residual_ = information_ * residual_;   // remove information here, we multi information matrix in problem solver
+    //    residual_ = information_ * residual_;   // remove information here, we multi information matrix in problem solver
 }
 
 //void EdgeReprojection::SetTranslationImuFromCamera(Eigen::Quaterniond &qic_, Vec3 &tic_) {
@@ -77,7 +78,7 @@ void EdgeReprojection::ComputeJacobians() {
     Mat23 reduce(2, 3);
     reduce << 1. / dep_j, 0, -pts_camera_j(0) / (dep_j * dep_j),
         0, 1. / dep_j, -pts_camera_j(1) / (dep_j * dep_j);
-//    reduce = information_ * reduce;
+    //    reduce = information_ * reduce;
 
     Eigen::Matrix<double, 2, 6> jacobian_pose_i;
     Eigen::Matrix<double, 3, 6> jaco_i;
@@ -108,22 +109,22 @@ void EdgeReprojection::ComputeJacobians() {
     jacobians_[3] = jacobian_ex_pose;
 
     ///------------- check jacobians -----------------
-//    {
-//        std::cout << jacobians_[0] <<std::endl;
-//        const double eps = 1e-6;
-//        inv_dep_i += eps;
-//        Eigen::Vector3d pts_camera_i = pts_i_ / inv_dep_i;
-//        Eigen::Vector3d pts_imu_i = qic * pts_camera_i + tic;
-//        Eigen::Vector3d pts_w = Qi * pts_imu_i + Pi;
-//        Eigen::Vector3d pts_imu_j = Qj.inverse() * (pts_w - Pj);
-//        Eigen::Vector3d pts_camera_j = qic.inverse() * (pts_imu_j - tic);
-//
-//        Eigen::Vector2d tmp_residual;
-//        double dep_j = pts_camera_j.z();
-//        tmp_residual = (pts_camera_j / dep_j).head<2>() - pts_j_.head<2>();
-//        tmp_residual = information_ * tmp_residual;
-//        std::cout <<"num jacobian: "<<  (tmp_residual - residual_) / eps <<std::endl;
-//    }
+    //    {
+    //        std::cout << jacobians_[0] <<std::endl;
+    //        const double eps = 1e-6;
+    //        inv_dep_i += eps;
+    //        Eigen::Vector3d pts_camera_i = pts_i_ / inv_dep_i;
+    //        Eigen::Vector3d pts_imu_i = qic * pts_camera_i + tic;
+    //        Eigen::Vector3d pts_w = Qi * pts_imu_i + Pi;
+    //        Eigen::Vector3d pts_imu_j = Qj.inverse() * (pts_w - Pj);
+    //        Eigen::Vector3d pts_camera_j = qic.inverse() * (pts_imu_j - tic);
+    //
+    //        Eigen::Vector2d tmp_residual;
+    //        double dep_j = pts_camera_j.z();
+    //        tmp_residual = (pts_camera_j / dep_j).head<2>() - pts_j_.head<2>();
+    //        tmp_residual = information_ * tmp_residual;
+    //        std::cout <<"num jacobian: "<<  (tmp_residual - residual_) / eps <<std::endl;
+    //    }
 
 }
 

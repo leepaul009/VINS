@@ -137,7 +137,8 @@ vector<shared_ptr<Edge>> Problem::GetConnectedEdges(std::shared_ptr<Vertex> vert
     return edges;
 }
 
-bool Problem::RemoveVertex(std::shared_ptr<Vertex> vertex) {
+bool Problem::RemoveVertex(std::shared_ptr<Vertex> vertex) 
+{
     //check if the vertex is in map_verticies_
     if (verticies_.find(vertex->Id()) == verticies_.end()) {
         // LOG(WARNING) << "The vertex " << vertex->Id() << " is not in the problem!" << endl;
@@ -625,21 +626,29 @@ VecX Problem::PCGSolver(const MatXX &A, const VecX &b, int maxIter = -1) {
  *  如果某个landmark和该frame相连，但是又不想加入marg, 那就把改edge先去掉
  *
  */
-bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > margVertexs, int pose_dim) {
+bool Problem::Marginalize(
+    const std::vector<std::shared_ptr<Vertex> > margVertexs, 
+    int pose_dim) 
+{
 
     SetOrdering();
     /// 找到需要 marg 的 edge, margVertexs[0] is frame, its edge contained pre-intergration
+    // vertexCams_vec[0] edge: EdgeReprojection, EdgeImu(pre_integrations[1])
+    // vertexVB_vec[0] edge: EdgeImu(pre_integrations[1])
     std::vector<shared_ptr<Edge>> marg_edges = GetConnectedEdges(margVertexs[0]);
 
     std::unordered_map<int, shared_ptr<Vertex>> margLandmark;
     // 构建 Hessian 的时候 pose 的顺序不变，landmark的顺序要重新设定
     int marg_landmark_size = 0;
     // std::cout << "\n marg edge 1st id: "<< marg_edges.front()->Id() << " end id: "<<marg_edges.back()->Id()<<std::endl;
-    for (size_t i = 0; i < marg_edges.size(); ++i) {
-    // std::cout << "marg edge id: "<< marg_edges[i]->Id() <<std::endl;
+    
+    for (size_t i = 0; i < marg_edges.size(); ++i) 
+    {
+        // std::cout << "marg edge id: "<< marg_edges[i]->Id() <<std::endl;
         auto verticies = marg_edges[i]->Verticies();
         for (auto iter : verticies) {
-            if (IsLandmarkVertex(iter) && margLandmark.find(iter->Id()) == margLandmark.end()) {
+            if (IsLandmarkVertex(iter) && margLandmark.find(iter->Id()) == margLandmark.end()) 
+            {
                 iter->SetOrderingId(pose_dim + marg_landmark_size);
                 margLandmark.insert(make_pair(iter->Id(), iter));
                 marg_landmark_size += iter->LocalDimension();
@@ -652,7 +661,9 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > margVertex
     MatXX H_marg(MatXX::Zero(cols, cols));
     VecX b_marg(VecX::Zero(cols));
     int ii = 0;
-    for (auto edge: marg_edges) {
+    // pre_integrations[1] and observation
+    for (auto edge: marg_edges) 
+    {
         edge->ComputeResidual();
         edge->ComputeJacobians();
         auto jacobians = edge->Jacobians();
@@ -660,7 +671,9 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > margVertex
         ii++;
 
         assert(jacobians.size() == verticies.size());
-        for (size_t i = 0; i < verticies.size(); ++i) {
+        
+        for (size_t i = 0; i < verticies.size(); ++i) 
+        {
             auto v_i = verticies[i];
             auto jacobian_i = jacobians[i];
             ulong index_i = v_i->OrderingId();
@@ -670,7 +683,8 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > margVertex
             MatXX robustInfo(edge->Information().rows(),edge->Information().cols());
             edge->RobustInfo(drho,robustInfo);
 
-            for (size_t j = i; j < verticies.size(); ++j) {
+            for (size_t j = i; j < verticies.size(); ++j) 
+            {
                 auto v_j = verticies[j];
                 auto jacobian_j = jacobians[j];
                 ulong index_j = v_j->OrderingId();
@@ -678,10 +692,12 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > margVertex
 
                 MatXX hessian = jacobian_i.transpose() * robustInfo * jacobian_j;
 
-                assert(hessian.rows() == v_i->LocalDimension() && hessian.cols() == v_j->LocalDimension());
+                assert(hessian.rows() == v_i->LocalDimension() 
+                       && hessian.cols() == v_j->LocalDimension());
                 // 所有的信息矩阵叠加起来
                 H_marg.block(index_i, index_j, dim_i, dim_j) += hessian;
-                if (j != i) {
+                if (j != i) 
+                {
                     // 对称的下三角
                     H_marg.block(index_j, index_i, dim_j, dim_i) += hessian.transpose();
                 }
@@ -690,23 +706,28 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > margVertex
         }
 
     }
-        std::cout << "edge factor cnt: " << ii <<std::endl;
+    std::cout << "edge factor cnt: " << ii <<std::endl;
 
     /// marg landmark
     int reserve_size = pose_dim;
-    if (marg_landmark_size > 0) {
+    if (marg_landmark_size > 0) 
+    {
         int marg_size = marg_landmark_size;
+        // block starting at (reserve_size, reserve_size)
+        // with size (marg_size, marg_size) 
         MatXX Hmm = H_marg.block(reserve_size, reserve_size, marg_size, marg_size);
         MatXX Hpm = H_marg.block(0, reserve_size, reserve_size, marg_size);
         MatXX Hmp = H_marg.block(reserve_size, 0, marg_size, reserve_size);
-        VecX bpp = b_marg.segment(0, reserve_size);
-        VecX bmm = b_marg.segment(reserve_size, marg_size);
+        VecX bpp  = b_marg.segment(0, reserve_size);
+        VecX bmm  = b_marg.segment(reserve_size, marg_size);
 
-        // Hmm 是对角线矩阵，它的求逆可以直接为对角线块分别求逆，如果是逆深度，对角线块为1维的，则直接为对角线的倒数，这里可以加速
+        // Hmm 是对角线矩阵，它的求逆可以直接为对角线块分别求逆，
+        // 如果是逆深度，对角线块为1维的，则直接为对角线的倒数，这里可以加速
         MatXX Hmm_inv(MatXX::Zero(marg_size, marg_size));
         // TODO:: use openMP
-        for (auto iter: margLandmark) {
-            int idx = iter.second->OrderingId() - reserve_size;
+        for (auto iter: margLandmark) 
+        {
+            int idx  = iter.second->OrderingId() - reserve_size;
             int size = iter.second->LocalDimension();
             Hmm_inv.block(idx, idx, size, size) = Hmm.block(idx, idx, size, size).inverse();
         }
@@ -731,10 +752,9 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > margVertex
     // index 大的先移动
     for (int k = margVertexs.size() -1 ; k >= 0; --k)
     {
-
         int idx = margVertexs[k]->OrderingId();
         int dim = margVertexs[k]->LocalDimension();
-    // std::cout << k << " "<<idx << std::endl;
+        // std::cout << k << " "<<idx << std::endl;
         marg_dim += dim;
         // move the marg pose to the Hmm bottown right
         // 将 row i 移动矩阵最下面
@@ -766,10 +786,10 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > margVertex
                               saes.eigenvectors().transpose();
 
     Eigen::VectorXd bmm2 = b_marg.segment(n2, m2);
-    Eigen::MatrixXd Arm = H_marg.block(0, n2, n2, m2);
-    Eigen::MatrixXd Amr = H_marg.block(n2, 0, m2, n2);
-    Eigen::MatrixXd Arr = H_marg.block(0, 0, n2, n2);
-    Eigen::VectorXd brr = b_marg.segment(0, n2);
+    Eigen::MatrixXd Arm  = H_marg.block(0, n2, n2, m2);
+    Eigen::MatrixXd Amr  = H_marg.block(n2, 0, m2, n2);
+    Eigen::MatrixXd Arr  = H_marg.block(0, 0, n2, n2);
+    Eigen::VectorXd brr  = b_marg.segment(0, n2);
     Eigen::MatrixXd tempB = Arm * Amm_inv;
     H_prior_ = Arr - tempB * Amr;
     b_prior_ = brr - tempB * bmm2;
@@ -779,7 +799,9 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > margVertex
     Eigen::VectorXd S_inv = Eigen::VectorXd(
             (saes2.eigenvalues().array() > eps).select(saes2.eigenvalues().array().inverse(), 0));
 
-    Eigen::VectorXd S_sqrt = S.cwiseSqrt();
+    // cwiseSqrt: element-wise square root
+    // asDiagonal: vector to diagonal matrix
+    Eigen::VectorXd S_sqrt = S.cwiseSqrt(); 
     Eigen::VectorXd S_inv_sqrt = S_inv.cwiseSqrt();
     Jt_prior_inv_ = S_inv_sqrt.asDiagonal() * saes2.eigenvectors().transpose();
     err_prior_ = -Jt_prior_inv_ * b_prior_;
@@ -793,11 +815,13 @@ bool Problem::Marginalize(const std::vector<std::shared_ptr<Vertex> > margVertex
     // std::cout << "    error prior: " <<err_prior_.norm() << std::endl;
 
     // remove vertex and remove edge
-    for (size_t k = 0; k < margVertexs.size(); ++k) {
+    for (size_t k = 0; k < margVertexs.size(); ++k) 
+    {
         RemoveVertex(margVertexs[k]);
     }
 
-    for (auto landmarkVertex: margLandmark) {
+    for (auto landmarkVertex: margLandmark) 
+    {
         RemoveVertex(landmarkVertex.second);
     }
 

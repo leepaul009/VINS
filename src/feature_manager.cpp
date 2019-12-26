@@ -56,18 +56,23 @@ bool FeatureManager::addFeatureCheckParallax(
     
     for (auto &id_pts : image) // 遍历特征点
     {
-        FeaturePerFrame f_per_fra(id_pts.second[0].second, // 3D点对于帧的信息
-                                  td);
+        // 特征点对于当前帧的 光心坐标系和图像坐标系的 坐标等信息
+        FeaturePerFrame f_per_fra(id_pts.second[0].second, td);
 
         int feature_id = id_pts.first;
         auto it = find_if(feature.begin(), feature.end(), [feature_id](const FeaturePerId &it)
         { return it.feature_id == feature_id; });
 
-        if (it == feature.end())
+        // 找不到match，即当前特征点不在feature里
+        if (it == feature.end()) 
         {
+            // 将当前帧的此特征点作为新的3D点存入feature（特征id和帧id）
             feature.push_back(FeaturePerId(feature_id, frame_count));
-            feature.back().feature_per_frame.push_back(f_per_fra);
+            // 为新创建的3D点添加observation
+            // observation包括：3D点在当前帧的观测信息
+            feature.back().feature_per_frame.push_back(f_per_fra); 
         }
+        // 为match上的3D点添加observation
         else if (it->feature_id == feature_id)
         {
             it->feature_per_frame.push_back(f_per_fra);
@@ -75,14 +80,19 @@ bool FeatureManager::addFeatureCheckParallax(
         }
     }
 
+    // 前两帧的情况，或者当跟踪点小于20个时
     if (frame_count < 2 || last_track_num < 20)
         return true;
 
     for (auto &it_per_id : feature)
     {
+        // 特征的第一次观测在倒数第二帧或更早的帧 && 特征的观测有漏帧
+        // 即此特征已经观测很久，并且跟踪质量很好
         if (it_per_id.start_frame <= frame_count - 2 &&
             it_per_id.start_frame + int(it_per_id.feature_per_frame.size()) - 1 >= frame_count - 1)
         {
+            // 累加特征在second & third last observed frame的3D点的offset
+            // 3D点在光心坐标系下， offset = sqrt(x_offset^2 + y_offset^2)
             parallax_sum += compensatedParallax2(it_per_id, frame_count);
             parallax_num++;
         }
@@ -96,6 +106,7 @@ bool FeatureManager::addFeatureCheckParallax(
     {
         //ROS_DEBUG("parallax_sum: %lf, parallax_num: %d", parallax_sum, parallax_num);
         //ROS_DEBUG("current parallax: %lf", parallax_sum / parallax_num * FOCAL_LENGTH);
+        // 当所有特征的平均offset大于等于{10/460}时，返回true
         return parallax_sum / parallax_num >= MIN_PARALLAX;
     }
 }
@@ -367,12 +378,20 @@ void FeatureManager::removeFront(int frame_count)
     }
 }
 
-double FeatureManager::compensatedParallax2(const FeaturePerId &it_per_id, int frame_count)
+/*
+* param
+*   it_per_id：   3D点（特征）
+*   frame_count： 当前帧id
+*/
+double FeatureManager::compensatedParallax2(const FeaturePerId &it_per_id, 
+                                            int frame_count)
 {
     //check the second last frame is keyframe or not
-    //parallax betwwen seconde last frame and third last frame
-    const FeaturePerFrame &frame_i = it_per_id.feature_per_frame[frame_count - 2 - it_per_id.start_frame];
-    const FeaturePerFrame &frame_j = it_per_id.feature_per_frame[frame_count - 1 - it_per_id.start_frame];
+    //parallax betwwen seconde last frame and third last frame 
+    const FeaturePerFrame &frame_i 
+        = it_per_id.feature_per_frame[frame_count - 2 - it_per_id.start_frame];
+    const FeaturePerFrame &frame_j 
+        = it_per_id.feature_per_frame[frame_count - 1 - it_per_id.start_frame];
 
     double ans = 0;
     Vector3d p_j = frame_j.point;
@@ -390,6 +409,7 @@ double FeatureManager::compensatedParallax2(const FeaturePerId &it_per_id, int f
     double dep_i = p_i(2);
     double u_i = p_i(0) / dep_i;
     double v_i = p_i(1) / dep_i;
+    // 计算当前特征点在i帧和j帧的x和y的offset
     double du = u_i - u_j, dv = v_i - v_j;
 
     double dep_i_comp = p_i_comp(2);
@@ -397,6 +417,7 @@ double FeatureManager::compensatedParallax2(const FeaturePerId &it_per_id, int f
     double v_i_comp = p_i_comp(1) / dep_i_comp;
     double du_comp = u_i_comp - u_j, dv_comp = v_i_comp - v_j;
 
+    // 计算当前特征点在i帧和j帧的位移
     ans = max(ans, sqrt(min(du * du + dv * dv, du_comp * du_comp + dv_comp * dv_comp)));
 
     return ans;

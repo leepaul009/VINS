@@ -57,7 +57,7 @@ public:
   double estimated_depth;
   int solve_flag; // 0 haven't solve yet; 1 solve succ; 2 solve fail;
 
-  Vector3d gt_p;
+  Vector3d gt_p; // 世界坐标系的3D点坐标？？
 
   FeaturePerId(int _feature_id, int _start_frame)
       : feature_id(_feature_id), start_frame(_start_frame),

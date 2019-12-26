@@ -160,7 +160,7 @@ void Estimator::processImage(
     // cout << "Adding feature points: " << image.size()<<endl;
     // 将image中的3D点相对于帧的信息置于f_manager中
     if (f_manager.addFeatureCheckParallax(frame_count, image, td))
-        marginalization_flag = MARGIN_OLD;
+        marginalization_flag = MARGIN_OLD; // 可能这时候会选择当前帧为关键帧？？
     else
         marginalization_flag = MARGIN_SECOND_NEW;
 
@@ -775,7 +775,8 @@ void Estimator::MargOldFrame()
     {
         shared_ptr<backend::VertexPose> vertexCam(new backend::VertexPose());
         Eigen::VectorXd pose(7);
-        pose << para_Pose[i][0], para_Pose[i][1], para_Pose[i][2], para_Pose[i][3], para_Pose[i][4], para_Pose[i][5], para_Pose[i][6];
+        pose << para_Pose[i][0], para_Pose[i][1], para_Pose[i][2], 
+                para_Pose[i][3], para_Pose[i][4], para_Pose[i][5], para_Pose[i][6];
         vertexCam->SetParameters(pose);
         vertexCams_vec.push_back(vertexCam);
         problem.AddVertex(vertexCam);
@@ -784,8 +785,8 @@ void Estimator::MargOldFrame()
         shared_ptr<backend::VertexSpeedBias> vertexVB(new backend::VertexSpeedBias());
         Eigen::VectorXd vb(9);
         vb << para_SpeedBias[i][0], para_SpeedBias[i][1], para_SpeedBias[i][2],
-            para_SpeedBias[i][3], para_SpeedBias[i][4], para_SpeedBias[i][5],
-            para_SpeedBias[i][6], para_SpeedBias[i][7], para_SpeedBias[i][8];
+              para_SpeedBias[i][3], para_SpeedBias[i][4], para_SpeedBias[i][5],
+              para_SpeedBias[i][6], para_SpeedBias[i][7], para_SpeedBias[i][8];
         vertexVB->SetParameters(vb);
         vertexVB_vec.push_back(vertexVB);
         problem.AddVertex(vertexVB);
@@ -796,7 +797,8 @@ void Estimator::MargOldFrame()
     {
         if (pre_integrations[1]->sum_dt < 10.0)
         {
-            std::shared_ptr<backend::EdgeImu> imuEdge(new backend::EdgeImu(pre_integrations[1]));
+            std::shared_ptr<backend::EdgeImu>
+                imuEdge(new backend::EdgeImu(pre_integrations[1]));
             std::vector<std::shared_ptr<backend::Vertex>> edge_vertex;
             edge_vertex.push_back(vertexCams_vec[0]);
             edge_vertex.push_back(vertexVB_vec[0]);
@@ -820,12 +822,13 @@ void Estimator::MargOldFrame()
             ++feature_index;
 
             int imu_i = it_per_id.start_frame, imu_j = imu_i - 1;
-            if (imu_i != 0)
+            if (imu_i != 0) // 起始帧必须为第一帧
                 continue;
 
             Vector3d pts_i = it_per_id.feature_per_frame[0].point;
 
-            shared_ptr<backend::VertexInverseDepth> verterxPoint(new backend::VertexInverseDepth());
+            shared_ptr<backend::VertexInverseDepth> 
+                verterxPoint(new backend::VertexInverseDepth());
             VecX inv_d(1);
             inv_d << para_Feature[feature_index][0];
             verterxPoint->SetParameters(inv_d);
@@ -840,7 +843,8 @@ void Estimator::MargOldFrame()
 
                 Vector3d pts_j = it_per_frame.point;
 
-                std::shared_ptr<backend::EdgeReprojection> edge(new backend::EdgeReprojection(pts_i, pts_j));
+                std::shared_ptr<backend::EdgeReprojection> 
+                    edge(new backend::EdgeReprojection(pts_i, pts_j));
                 std::vector<std::shared_ptr<backend::Vertex>> edge_vertex;
                 edge_vertex.push_back(verterxPoint);
                 edge_vertex.push_back(vertexCams_vec[imu_i]);
@@ -882,6 +886,7 @@ void Estimator::MargOldFrame()
     marg_vertex.push_back(vertexCams_vec[0]);
     marg_vertex.push_back(vertexVB_vec[0]);
     problem.Marginalize(marg_vertex, pose_dim);
+    // after computed, prior H and b willl be return 
     Hprior_ = problem.GetHessianPrior();
     bprior_ = problem.GetbPrior();
     errprior_ = problem.GetErrPrior();
@@ -1025,7 +1030,8 @@ void Estimator::problemSolve()
         if (pre_integrations[j]->sum_dt > 10.0)
             continue;
 
-        std::shared_ptr<backend::EdgeImu> imuEdge(new backend::EdgeImu(pre_integrations[j]));
+        std::shared_ptr<backend::EdgeImu> 
+            imuEdge(new backend::EdgeImu(pre_integrations[j]));
         std::vector<std::shared_ptr<backend::Vertex>> edge_vertex;
 
         edge_vertex.push_back(vertexCams_vec[i]);
@@ -1042,10 +1048,13 @@ void Estimator::problemSolve()
     vector<shared_ptr<backend::VertexInverseDepth>> vertexPt_vec;
     {
         int feature_index = -1;
-        // 遍历每一个特征
+        // 遍历每一个被跟踪的3D点
         for (auto &it_per_id : f_manager.feature)
         {
+            // observation数量
             it_per_id.used_num = it_per_id.feature_per_frame.size();
+
+            // 3D点质量较差则忽略
             if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2))
                 continue;
 
@@ -1056,21 +1065,23 @@ void Estimator::problemSolve()
 
             shared_ptr<backend::VertexInverseDepth> verterxPoint(new backend::VertexInverseDepth());
             VecX inv_d(1);
-            inv_d << para_Feature[feature_index][0];
+            // para_Feature的数量=质量合格的3D点
+            inv_d << para_Feature[feature_index][0]; // inverse depth
             verterxPoint->SetParameters(inv_d);
             problem.AddVertex(verterxPoint);
             vertexPt_vec.push_back(verterxPoint);
 
-            // 遍历所有的观测
+            // 遍历所有的obervation
             for (auto &it_per_frame : it_per_id.feature_per_frame)
             {
                 imu_j++;
                 if (imu_i == imu_j)
                     continue;
-
+                
                 Vector3d pts_j = it_per_frame.point;
 
-                std::shared_ptr<backend::EdgeReprojection> edge(new backend::EdgeReprojection(pts_i, pts_j));
+                std::shared_ptr<backend::EdgeReprojection> 
+                    edge(new backend::EdgeReprojection(pts_i, pts_j));
                 std::vector<std::shared_ptr<backend::Vertex>> edge_vertex;
                 edge_vertex.push_back(verterxPoint);
                 edge_vertex.push_back(vertexCams_vec[imu_i]);
@@ -1166,8 +1177,10 @@ void Estimator::backendOptimization()
             addr_shift[reinterpret_cast<long>(para_Pose[i])] = para_Pose[i - 1];
             addr_shift[reinterpret_cast<long>(para_SpeedBias[i])] = para_SpeedBias[i - 1];
         }
+
         for (int i = 0; i < NUM_OF_CAM; i++)
             addr_shift[reinterpret_cast<long>(para_Ex_Pose[i])] = para_Ex_Pose[i];
+
         if (ESTIMATE_TD)
         {
             addr_shift[reinterpret_cast<long>(para_Td[0])] = para_Td[0];
