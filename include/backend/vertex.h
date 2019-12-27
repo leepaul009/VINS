@@ -5,6 +5,8 @@
 
 namespace myslam {
 namespace backend {
+
+// defined in vertex.cc and reset to 0 when Problem dest.
 extern unsigned long global_vertex_id;
 /**
  * @brief 顶点，对应一个parameter block

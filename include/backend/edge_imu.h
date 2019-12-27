@@ -19,17 +19,22 @@ class EdgeImu : public Edge {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
-    explicit EdgeImu(IntegrationBase* _pre_integration):pre_integration_(_pre_integration),
-          Edge(15, 4, std::vector<std::string>{"VertexPose", "VertexSpeedBias", "VertexPose", "VertexSpeedBias"}) {
-//        if (pre_integration_) {
-//            pre_integration_->GetJacobians(dr_dbg_, dv_dbg_, dv_dba_, dp_dbg_, dp_dba_);
-//            Mat99 cov_meas = pre_integration_->GetCovarianceMeasurement();
-//            Mat66 cov_rand_walk = pre_integration_->GetCovarianceRandomWalk();
-//            Mat1515 cov = Mat1515::Zero();
-//            cov.block<9, 9>(0, 0) = cov_meas;
-//            cov.block<6, 6>(9, 9) = cov_rand_walk;
-//            SetInformation(cov.inverse());
-//        }
+    explicit EdgeImu(IntegrationBase* _pre_integration)
+        :pre_integration_(_pre_integration),
+        Edge(15, 4, 
+             std::vector<std::string>{"VertexPose", 
+                                      "VertexSpeedBias", 
+                                      "VertexPose", 
+                                      "VertexSpeedBias"}) {
+        /* if (pre_integration_) {
+          pre_integration_->GetJacobians(dr_dbg_, dv_dbg_, dv_dba_, dp_dbg_, dp_dba_);
+          Mat99 cov_meas = pre_integration_->GetCovarianceMeasurement();
+          Mat66 cov_rand_walk = pre_integration_->GetCovarianceRandomWalk();
+          Mat1515 cov = Mat1515::Zero();
+          cov.block<9, 9>(0, 0) = cov_meas;
+          cov.block<6, 6>(9, 9) = cov_rand_walk;
+          SetInformation(cov.inverse());
+        }*/
     }
 
     /// 返回边的类型信息

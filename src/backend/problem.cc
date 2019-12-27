@@ -14,7 +14,8 @@
 using namespace std;
 
 // define the format you want, you only need one instance of this...
-const static Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n");
+const static Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, 
+                                       Eigen::DontAlignCols, ", ", "\n");
 
 void writeToCSVfile(std::string name, Eigen::MatrixXd matrix) {
     std::ofstream f(name.c_str());
@@ -23,33 +24,44 @@ void writeToCSVfile(std::string name, Eigen::MatrixXd matrix) {
 
 namespace myslam {
 namespace backend {
+
 void Problem::LogoutVectorSize() {
     // LOG(INFO) <<
-    //           "1 problem::LogoutVectorSize verticies_:" << verticies_.size() <<
-    //           " edges:" << edges_.size();
+    //  "1 problem::LogoutVectorSize verticies_:" << verticies_.size() <<
+    //  " edges:" << edges_.size();
 }
 
-Problem::Problem(ProblemType problemType) :
-    problemType_(problemType) {
+Problem::Problem(ProblemType problemType) 
+    : problemType_(problemType) 
+{
     LogoutVectorSize();
     verticies_marg_.clear();
 }
 
-Problem::~Problem() {
-//    std::cout << "Problem IS Deleted"<<std::endl;
+Problem::~Problem() 
+{
+    // std::cout << "Problem IS Deleted"<<std::endl;
     global_vertex_id = 0;
 }
 
-bool Problem::AddVertex(std::shared_ptr<Vertex> vertex) {
-    if (verticies_.find(vertex->Id()) != verticies_.end()) {
+bool Problem::AddVertex(std::shared_ptr<Vertex> vertex) 
+{
+    if (verticies_.find(vertex->Id()) != verticies_.end()) 
+    {
         // LOG(WARNING) << "Vertex " << vertex->Id() << " has been added before";
         return false;
-    } else {
-        verticies_.insert(pair<unsigned long, shared_ptr<Vertex>>(vertex->Id(), vertex));
+    }
+    else 
+    {
+        verticies_.insert(pair<unsigned long, 
+                          shared_ptr<Vertex>>(vertex->Id(), vertex));
     }
 
-    if (problemType_ == ProblemType::SLAM_PROBLEM) {
-        if (IsPoseVertex(vertex)) {
+    if (problemType_ == ProblemType::SLAM_PROBLEM) 
+    {
+        //VertexPose or VertexSpeedBias
+        if (IsPoseVertex(vertex)) 
+        {
             ResizePoseHessiansWhenAddingPose(vertex);
         }
     }
@@ -72,17 +84,19 @@ void Problem::AddOrderingSLAM(std::shared_ptr<myslam::backend::Vertex> v)
     }
 }
 
-void Problem::ResizePoseHessiansWhenAddingPose(shared_ptr<Vertex> v) {
-
+void Problem::ResizePoseHessiansWhenAddingPose(shared_ptr<Vertex> v) 
+{
     int size = H_prior_.rows() + v->LocalDimension();
-    H_prior_.conservativeResize(size, size);
+    H_prior_.conservativeResize(size, size); // extent un-init
     b_prior_.conservativeResize(size);
 
-    b_prior_.tail(v->LocalDimension()).setZero();
+    // init block containing the last n elements
+    // init last n cols and last n rows
+    b_prior_.tail(v->LocalDimension()).setZero(); 
     H_prior_.rightCols(v->LocalDimension()).setZero();
     H_prior_.bottomRows(v->LocalDimension()).setZero();
-
 }
+
 void Problem::ExtendHessiansPriorSize(int dim)
 {
     int size = H_prior_.rows() + dim;
@@ -98,7 +112,7 @@ bool Problem::IsPoseVertex(std::shared_ptr<myslam::backend::Vertex> v)
 {
     string type = v->TypeInfo();
     return type == string("VertexPose") ||
-            type == string("VertexSpeedBias");
+           type == string("VertexSpeedBias");
 }
 
 bool Problem::IsLandmarkVertex(std::shared_ptr<myslam::backend::Vertex> v) 
@@ -110,24 +124,29 @@ bool Problem::IsLandmarkVertex(std::shared_ptr<myslam::backend::Vertex> v)
 
 bool Problem::AddEdge(shared_ptr<Edge> edge) 
 {
-    if (edges_.find(edge->Id()) == edges_.end()) {
+    if (edges_.find(edge->Id()) == edges_.end()) 
+    {
         edges_.insert(pair<ulong, std::shared_ptr<Edge>>(edge->Id(), edge));
-    } else {
+    } 
+    else 
+    {
         // LOG(WARNING) << "Edge " << edge->Id() << " has been added before!";
         return false;
     }
 
-    for (auto &vertex: edge->Verticies()) {
+    for (auto &vertex: edge->Verticies())
+    {
         vertexToEdge_.insert(pair<ulong, shared_ptr<Edge>>(vertex->Id(), edge));
     }
     return true;
 }
 
-vector<shared_ptr<Edge>> Problem::GetConnectedEdges(std::shared_ptr<Vertex> vertex) {
+vector<shared_ptr<Edge>> Problem::GetConnectedEdges(std::shared_ptr<Vertex> vertex) 
+{
     vector<shared_ptr<Edge>> edges;
     auto range = vertexToEdge_.equal_range(vertex->Id());
-    for (auto iter = range.first; iter != range.second; ++iter) {
-
+    for (auto iter = range.first; iter != range.second; ++iter) 
+    {
         // 并且这个edge还需要存在，而不是已经被remove了
         if (edges_.find(iter->second->Id()) == edges_.end())
             continue;
@@ -260,6 +279,11 @@ bool Problem::SolveGenericProblem(int iterations)
     return true;
 }
 
+// 将pose vertex顺序地装入idx_pose_vertices_, 
+// 将lm vertex顺序地装入idx_landmark_vertices_,
+// 每个vertex的ordering_id各表示pose或lm节点的顺序(pose在前，lm在后)。
+// 或可以在idx_pose_vertices或idx_landmark_vertices_中找到，
+// 一个vertex，然后访问vertex的ordering_id来访问上述顺序结构。
 void Problem::SetOrdering() 
 {
     // 每次重新计数
@@ -273,7 +297,7 @@ void Problem::SetOrdering()
         // 所有的优化变量总维数
         ordering_generic_ += vertex.second->LocalDimension();
         // 如果是 slam 问题，还要分别统计 pose 和 landmark 的维数，后面会对他们进行排序
-        if (problemType_ == ProblemType::SLAM_PROBLEM)    
+        if (problemType_ == ProblemType::SLAM_PROBLEM)
         {
             AddOrderingSLAM(vertex.second);
         }
@@ -624,31 +648,38 @@ VecX Problem::PCGSolver(const MatXX &A, const VecX &b, int maxIter = -1) {
 /*
  *  marg 所有和 frame 相连的 edge: imu factor, projection factor
  *  如果某个landmark和该frame相连，但是又不想加入marg, 那就把改edge先去掉
- *
+ * Parameter:
+ *   margVertexs：vertexCams_vec[0]和vertexVB_vec[0]
  */
 bool Problem::Marginalize(
     const std::vector<std::shared_ptr<Vertex> > margVertexs, 
     int pose_dim) 
 {
-
+    // 构造idx_pose_vertices_和idx_landmark_vertices_，
+    // 并给每个vertex存储“特定顺序”在其ordering_id中。
     SetOrdering();
+
     /// 找到需要 marg 的 edge, margVertexs[0] is frame, its edge contained pre-intergration
-    // vertexCams_vec[0] edge: EdgeReprojection, EdgeImu(pre_integrations[1])
-    // vertexVB_vec[0] edge: EdgeImu(pre_integrations[1])
+    // 第一个marg节点vertexCams_vec[0]的edge包括:
+    // EdgeReprojection(每个特征observation：0-i), EdgeImu(pre_integrations[1])
     std::vector<shared_ptr<Edge>> marg_edges = GetConnectedEdges(margVertexs[0]);
 
+    // unique landmark vertex connected with vertexCams_vec[0]
     std::unordered_map<int, shared_ptr<Vertex>> margLandmark;
+
     // 构建 Hessian 的时候 pose 的顺序不变，landmark的顺序要重新设定
     int marg_landmark_size = 0;
     // std::cout << "\n marg edge 1st id: "<< marg_edges.front()->Id() << " end id: "<<marg_edges.back()->Id()<<std::endl;
     
-    for (size_t i = 0; i < marg_edges.size(); ++i) 
+    for (size_t i = 0; i < marg_edges.size(); ++i)
     {
         // std::cout << "marg edge id: "<< marg_edges[i]->Id() <<std::endl;
         auto verticies = marg_edges[i]->Verticies();
-        for (auto iter : verticies) {
+        for (auto iter : verticies) 
+        {
             if (IsLandmarkVertex(iter) && margLandmark.find(iter->Id()) == margLandmark.end()) 
             {
+                // iter为landmark节点
                 iter->SetOrderingId(pose_dim + marg_landmark_size);
                 margLandmark.insert(make_pair(iter->Id(), iter));
                 marg_landmark_size += iter->LocalDimension();
@@ -680,8 +711,9 @@ bool Problem::Marginalize(
             ulong dim_i = v_i->LocalDimension();
 
             double drho;
-            MatXX robustInfo(edge->Information().rows(),edge->Information().cols());
-            edge->RobustInfo(drho,robustInfo);
+            MatXX robustInfo(edge->Information().rows(),
+                             edge->Information().cols());
+            edge->RobustInfo(drho, robustInfo);
 
             for (size_t j = i; j < verticies.size(); ++j) 
             {
@@ -702,7 +734,8 @@ bool Problem::Marginalize(
                     H_marg.block(index_j, index_i, dim_j, dim_i) += hessian.transpose();
                 }
             }
-            b_marg.segment(index_i, dim_i) -= drho * jacobian_i.transpose() * edge->Information() * edge->Residual();
+            b_marg.segment(index_i, dim_i) 
+                -= drho * jacobian_i.transpose() * edge->Information() * edge->Residual();
         }
 
     }
@@ -727,7 +760,8 @@ bool Problem::Marginalize(
         // TODO:: use openMP
         for (auto iter: margLandmark) 
         {
-            int idx  = iter.second->OrderingId() - reserve_size;
+            // 排除pose_dim的lm位置，对应Hmm
+            int idx  = iter.second->OrderingId() - reserve_size; 
             int size = iter.second->LocalDimension();
             Hmm_inv.block(idx, idx, size, size) = Hmm.block(idx, idx, size, size).inverse();
         }
@@ -749,7 +783,7 @@ bool Problem::Marginalize(
     /// marg frame and speedbias
     int marg_dim = 0;
 
-    // index 大的先移动
+    // index 大的先移动 k=1,0
     for (int k = margVertexs.size() -1 ; k >= 0; --k)
     {
         int idx = margVertexs[k]->OrderingId();

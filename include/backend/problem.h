@@ -184,10 +184,8 @@ private:
 
     /// all vertices
     HashVertex verticies_;
-
     /// all edges
     HashEdge edges_;
-
     /// 由vertex id查询edge
     HashVertexIdToEdge vertexToEdge_;
 

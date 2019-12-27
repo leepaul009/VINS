@@ -765,12 +765,14 @@ void Estimator::MargOldFrame()
     shared_ptr<backend::VertexPose> vertexExt(new backend::VertexPose());
     {
         Eigen::VectorXd pose(7);
-        pose << para_Ex_Pose[0][0], para_Ex_Pose[0][1], para_Ex_Pose[0][2], para_Ex_Pose[0][3], para_Ex_Pose[0][4], para_Ex_Pose[0][5], para_Ex_Pose[0][6];
+        pose << para_Ex_Pose[0][0], para_Ex_Pose[0][1], para_Ex_Pose[0][2], 
+            para_Ex_Pose[0][3], para_Ex_Pose[0][4], para_Ex_Pose[0][5], para_Ex_Pose[0][6];
         vertexExt->SetParameters(pose);
-        problem.AddVertex(vertexExt);
-        pose_dim += vertexExt->LocalDimension();
+        problem.AddVertex(vertexExt); // resize&init H/b_prior_(+6)
+        pose_dim += vertexExt->LocalDimension(); // local_dim=6
     }
 
+    // 位姿，速度和bias节点，并调整problem.H/b_prior_的尺寸(6+9)*i和初始化
     for (int i = 0; i < WINDOW_SIZE + 1; i++)
     {
         shared_ptr<backend::VertexPose> vertexCam(new backend::VertexPose());
@@ -779,8 +781,8 @@ void Estimator::MargOldFrame()
                 para_Pose[i][3], para_Pose[i][4], para_Pose[i][5], para_Pose[i][6];
         vertexCam->SetParameters(pose);
         vertexCams_vec.push_back(vertexCam);
-        problem.AddVertex(vertexCam);
-        pose_dim += vertexCam->LocalDimension();
+        problem.AddVertex(vertexCam); // resize&init H/b_prior_(+6)
+        pose_dim += vertexCam->LocalDimension(); // local_dim=6
 
         shared_ptr<backend::VertexSpeedBias> vertexVB(new backend::VertexSpeedBias());
         Eigen::VectorXd vb(9);
@@ -789,21 +791,25 @@ void Estimator::MargOldFrame()
               para_SpeedBias[i][6], para_SpeedBias[i][7], para_SpeedBias[i][8];
         vertexVB->SetParameters(vb);
         vertexVB_vec.push_back(vertexVB);
-        problem.AddVertex(vertexVB);
-        pose_dim += vertexVB->LocalDimension();
+        problem.AddVertex(vertexVB); // resize&init H/b_prior_(+9)
+        pose_dim += vertexVB->LocalDimension(); // local_dim=9
     }
 
-    // IMU
+    // IMU Pre-Integration
     {
+        // notice that pre_integrations[0] is an inited obj.
         if (pre_integrations[1]->sum_dt < 10.0)
         {
+            // init EdgeImu with R(15x1) J(4) I(15x15, Identity)
             std::shared_ptr<backend::EdgeImu>
                 imuEdge(new backend::EdgeImu(pre_integrations[1]));
             std::vector<std::shared_ptr<backend::Vertex>> edge_vertex;
+
             edge_vertex.push_back(vertexCams_vec[0]);
             edge_vertex.push_back(vertexVB_vec[0]);
             edge_vertex.push_back(vertexCams_vec[1]);
             edge_vertex.push_back(vertexVB_vec[1]);
+
             imuEdge->SetVertex(edge_vertex);
             problem.AddEdge(imuEdge);
         }
@@ -816,7 +822,8 @@ void Estimator::MargOldFrame()
         for (auto &it_per_id : f_manager.feature)
         {
             it_per_id.used_num = it_per_id.feature_per_frame.size();
-            if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2))
+            if (!(it_per_id.used_num >= 2 
+                && it_per_id.start_frame < WINDOW_SIZE - 2))
                 continue;
 
             ++feature_index;
@@ -852,7 +859,8 @@ void Estimator::MargOldFrame()
                 edge_vertex.push_back(vertexExt);
 
                 edge->SetVertex(edge_vertex);
-                edge->SetInformation(project_sqrt_info_.transpose() * project_sqrt_info_);
+                edge->SetInformation(project_sqrt_info_.transpose() 
+                                     * project_sqrt_info_);
 
                 edge->SetLossFunction(lossfunction);
                 problem.AddEdge(edge);
@@ -869,14 +877,17 @@ void Estimator::MargOldFrame()
             problem.SetbPrior(bprior_);
             problem.SetErrPrior(errprior_);
             problem.SetJtPrior(Jprior_inv_);
-            problem.ExtendHessiansPriorSize(15); // 但是这个 prior 还是之前的维度，需要扩展下装新的pose
+            // 但是这个 prior 还是之前的维度，需要扩展下装新的pose
+            problem.ExtendHessiansPriorSize(15); 
         }
         else
         {
-            Hprior_ = MatXX(pose_dim, pose_dim);
+            Hprior_ = MatXX(pose_dim, pose_dim); // 6+(6+9)*i
             Hprior_.setZero();
+            
             bprior_ = VecX(pose_dim);
             bprior_.setZero();
+
             problem.SetHessianPrior(Hprior_); // 告诉这个 problem
             problem.SetbPrior(bprior_);
         }
@@ -886,6 +897,7 @@ void Estimator::MargOldFrame()
     marg_vertex.push_back(vertexCams_vec[0]);
     marg_vertex.push_back(vertexVB_vec[0]);
     problem.Marginalize(marg_vertex, pose_dim);
+    
     // after computed, prior H and b willl be return 
     Hprior_ = problem.GetHessianPrior();
     bprior_ = problem.GetbPrior();
